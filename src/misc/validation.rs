@@ -2,21 +2,22 @@ use crate::misc::conversion::sol_to_lamports;
 use anyhow::Result;
 use solana_pubkey::Pubkey;
 
+pub const MAX_SOL_AMOUNT: f64 = 1_000_000_000.0; 
+
 /// # Errors
 /// Returns an error if:
 /// - Amount is zero or negative
-/// - Amount exceeds maximum supported value (u64::MAX lamports)
+/// - Amount exceeds maximum supported value (`MAX_SOL_AMOUNT` SOL)
 /// - Amount is too small (less than 1 lamport)
 pub fn validate_amount(amount_sol: f64) -> Result<u64> {
     if amount_sol <= 0.0 {
         return Err(anyhow::anyhow!("Amount must be positive. You entered: {} SOL", amount_sol));
     }
 
-    const MAX_SOL: f64 = (u64::MAX as f64) / (crate::constants::LAMPORTS_PER_SOL as f64);
-    if amount_sol > MAX_SOL {
+    if amount_sol > MAX_SOL_AMOUNT {
         return Err(anyhow::anyhow!(
             "Amount too large. Maximum supported: {} SOL",
-            MAX_SOL
+            MAX_SOL_AMOUNT
         ));
     }
 
