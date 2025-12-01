@@ -3,9 +3,12 @@ use solana_pubkey::Pubkey;
 
 use crate::{
     commands::CommandExec,
-    constants::lamports_to_sol,
     context::ScillaContext,
     error::ScillaResult,
+    misc::{
+        build_transfer_transaction, display_transfer_confirmation, get_explorer_url,
+        lamports_to_sol, validate_amount, validate_balance, validate_transfer_params,
+    },
     prompt::prompt_data,
     ui::show_spinner,
 };
@@ -76,19 +79,10 @@ impl AccountCommand {
 async fn request_sol_airdrop(ctx: &ScillaContext) -> anyhow::Result<()> {
     use anyhow::Context;
     
-    let amount_sol: f64 = prompt_data("Enter amount in SOL to request:")
+    let amount_sol: f64 = prompt_data("Enter amount in SOL:")
         .context("Failed to parse amount. Please enter a valid number.")?;
     
-    if amount_sol <= 0.0 {
-        return Err(anyhow::anyhow!("Amount must be positive. You entered: {} SOL", amount_sol));
-    }
-    
-    let lamports = crate::constants::sol_to_lamports(amount_sol);
-    if lamports == 0 {
-        return Err(anyhow::anyhow!(
-            "Amount too small. Minimum supported: 0.000000001 SOL (1 lamport)"
-        ));
-    }
+    let lamports = validate_amount(amount_sol)?;
     
     let sig = ctx.rpc().request_airdrop(ctx.pubkey(), lamports).await;
     match sig {
@@ -137,94 +131,6 @@ async fn fetch_account_balance(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::
     Ok(())
 }
 
-fn validate_transfer_params(
-    sender: &Pubkey,
-    destination: &Pubkey,
-    amount_sol: f64,
-) -> anyhow::Result<u64> {
-    if destination == sender {
-        return Err(anyhow::anyhow!(
-            "Cannot send to self. Destination must be different from sender address."
-        ));
-    }
-
-    if amount_sol <= 0.0 {
-        return Err(anyhow::anyhow!("Amount must be positive. You entered: {} SOL", amount_sol));
-    }
-
-    const MAX_SOL: f64 = (u64::MAX as f64) / (crate::constants::LAMPORTS_PER_SOL as f64);
-    if amount_sol > MAX_SOL {
-        return Err(anyhow::anyhow!(
-            "Amount too large. Maximum supported: {} SOL",
-            MAX_SOL
-        ));
-    }
-
-    let lamports = crate::constants::sol_to_lamports(amount_sol);
-
-    if lamports == 0 {
-        return Err(anyhow::anyhow!(
-            "Amount too small. Minimum supported: 0.000000001 SOL (1 lamport)"
-        ));
-    }
-
-    Ok(lamports)
-}
-
-/// Validate balance is sufficient for transfer
-///
-/// # Errors
-/// Returns an error if balance is insufficient to cover transfer amount plus fees
-fn validate_balance(
-    balance_lamports: u64,
-    transfer_lamports: u64,
-    fee_lamports: u64,
-) -> anyhow::Result<()> {
-    let required = transfer_lamports.saturating_add(fee_lamports);
-    if balance_lamports < required {
-        return Err(anyhow::anyhow!(
-            "Insufficient balance. Required: {} SOL (including {} SOL fee), Available: {} SOL",
-            crate::constants::lamports_to_sol(required),
-            crate::constants::lamports_to_sol(fee_lamports),
-            crate::constants::lamports_to_sol(balance_lamports),
-        ));
-    }
-    Ok(())
-}
-
-/// # Errors
-/// Returns an error if:
-/// - RPC connection fails
-/// - Failed to get recent blockhash
-async fn build_transfer_transaction(
-    ctx: &ScillaContext,
-    destination: &Pubkey,
-    lamports: u64,
-) -> anyhow::Result<solana_sdk::transaction::Transaction> {
-    use anyhow::Context;
-    use solana_sdk::{message::Message, transaction::Transaction};
-    use solana_system_interface::instruction;
-
-    let transfer_instruction = instruction::transfer(ctx.pubkey(), destination, lamports);
-    let recent_blockhash = ctx
-        .rpc()
-        .get_latest_blockhash()
-        .await
-        .context("Failed to get recent blockhash. Check your RPC connection.")?;
-
-    let message = Message::new(std::slice::from_ref(&transfer_instruction), Some(ctx.pubkey()));
-    let mut transaction = Transaction::new_unsigned(message);
-    transaction.sign(&[ctx.keypair()], recent_blockhash);
-
-    Ok(transaction)
-}
-
-
-/// # Errors
-/// Returns an error if:
-/// - Transaction simulation fails
-/// - RPC connection fails
-/// - Balance is insufficient
 async fn simulate_and_validate_transfer(
     ctx: &ScillaContext,
     destination: &Pubkey,
@@ -264,59 +170,7 @@ async fn simulate_and_validate_transfer(
     Ok((current_balance, actual_fee_lamports))
 }
 
-fn display_transfer_confirmation(
-    ctx: &ScillaContext,
-    destination: &Pubkey,
-    amount_sol: f64,
-    lamports: u64,
-    current_balance: u64,
-    actual_fee_lamports: u64,
-) {
-    let actual_fee_sol = lamports_to_sol(actual_fee_lamports);
 
-    println!("\n{}", style("━".repeat(60)).dim());
-    println!("{}", style("Transfer Confirmation").bold().cyan());
-    println!("{}", style("━".repeat(60)).dim());
-    println!(
-        "{:<12} {}",
-        style("From:").bold(),
-        style(ctx.pubkey()).cyan()
-    );
-    println!(
-        "{:<12} {}",
-        style("To:").bold(),
-        style(destination).cyan()
-    );
-    println!(
-        "{:<12} {} SOL ({} lamports)",
-        style("Amount:").bold(),
-        style(amount_sol).green(),
-        style(lamports).dim()
-    );
-    println!(
-        "{:<12} {} SOL",
-        style("Current Balance:").bold(),
-        style(lamports_to_sol(current_balance)).yellow()
-    );
-    println!(
-        "{:<12} {} SOL",
-        style("Fee (actual):").bold(),
-        style(format!("{actual_fee_sol:.9}")).green()
-    );
-    println!(
-        "{:<12} {} SOL",
-        style("Balance after:").bold(),
-        style(lamports_to_sol(current_balance.saturating_sub(lamports).saturating_sub(actual_fee_lamports))).cyan()
-    );
-    println!("{}\n", style("━".repeat(60)).dim());
-}
-
-
-/// # Errors
-/// Returns an error if:
-/// - Balance changed since confirmation
-/// - RPC connection fails
-/// - Transaction send fails
 async fn execute_transfer(
     ctx: &ScillaContext,
     destination: &Pubkey,
@@ -387,13 +241,7 @@ async fn execute_transfer(
     Ok(())
 }
 
-/// # Errors
-/// Returns an error if:
-/// - Invalid destination address or amount
-/// - Insufficient balance (checked twice to prevent race conditions)
-/// - Transaction simulation fails
-/// - RPC connection fails
-/// - Transaction send fails
+
 async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
     use anyhow::Context;
     use inquire::Confirm;
@@ -432,44 +280,10 @@ async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_network_cluster(rpc_url: &str) -> &str {
-    let hostname = if let Some(start) = rpc_url.find("://") {
-        let after_scheme = &rpc_url[start + 3..];
-        if let Some(end) = after_scheme.find('/') {
-            &after_scheme[..end]
-        } else {
-            after_scheme
-        }
-    } else {
-        rpc_url
-    };
-
-    let host_only = if let Some(colon_pos) = hostname.find(':') {
-        &hostname[..colon_pos]
-    } else {
-        hostname
-    };
-
-    if host_only.contains("mainnet-beta") {
-        ""
-    } else if host_only.contains("devnet") {
-        "?cluster=devnet"
-    } else if host_only.contains("testnet") {
-        "?cluster=testnet"
-    } else {
-        "?cluster=custom"
-    }
-}
-
-fn get_explorer_url(signature: impl std::fmt::Display, ctx: &ScillaContext) -> String {
-    let rpc_url = ctx.rpc_url();
-    let network = get_network_cluster(rpc_url);
-    format!("https://explorer.solana.com/tx/{signature}{network}")
-}
 
 #[cfg(test)]
 mod tests {
-    use super::{get_network_cluster, validate_transfer_params, validate_balance};
+    use crate::misc::{get_network_cluster, validate_balance, validate_transfer_params};
     use std::str::FromStr;
     use solana_pubkey::Pubkey;
 
