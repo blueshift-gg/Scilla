@@ -19,6 +19,8 @@ pub struct ScillaConfig {
     pub rpc_url: String,
     pub commitment_level: CommitmentLevel,
     pub keypair_path: PathBuf,
+    #[serde(default)]
+    pub cluster: Option<String>,
 }
 
 impl ScillaConfig {
@@ -31,5 +33,22 @@ impl ScillaConfig {
         let data = fs::read_to_string(scilla_config_path)?;
         let config: ScillaConfig = toml::from_str(&data)?;
         Ok(config)
+    }
+
+    pub fn explorer_url(&self, signature: impl std::fmt::Display) -> String {
+        Self::explorer_url_for_cluster(signature, self.cluster.as_deref())
+    }
+
+    pub fn explorer_url_for_cluster(
+        signature: impl std::fmt::Display,
+        cluster: Option<&str>,
+    ) -> String {
+        let cluster = cluster.unwrap_or("mainnet");
+        if cluster.eq_ignore_ascii_case("mainnet") || cluster.eq_ignore_ascii_case("mainnet-beta")
+        {
+            format!("https://explorer.solana.com/tx/{signature}")
+        } else {
+            format!("https://explorer.solana.com/tx/{signature}?cluster={cluster}")
+        }
     }
 }

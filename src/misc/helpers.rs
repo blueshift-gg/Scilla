@@ -1,116 +1,86 @@
-use crate::context::ScillaContext;
-use anyhow::{Context, Result};
-use console::style;
+use crate::{context::ScillaContext, config::ScillaConfig};
+use anyhow::{anyhow, Context, Result};
 use solana_message::Message;
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction;
 use solana_transaction::Transaction;
+use crate::constants::LAMPORTS_PER_SOL;
 
-use crate::misc::conversion::lamports_to_sol;
+pub const MAX_LAMPORT_AMOUNT: u64 = u64::MAX;
 
 
-/// # Errors
-/// Returns an error if:
-/// - RPC connection fails
-/// - Failed to get recent blockhash
-pub async fn build_transfer_transaction(
+pub fn lamports_to_sol(lamports: u64) -> f64 {
+    lamports as f64 / LAMPORTS_PER_SOL as f64
+}
+
+pub fn checked_sol_to_lamports(amount_sol: f64) -> Result<u64> {
+    if !amount_sol.is_finite() {
+        return Err(anyhow!(
+            "Amount must be a finite number. You entered: {}",
+            amount_sol
+        ));
+    }
+
+    let lamports_f64 = amount_sol * LAMPORTS_PER_SOL as f64;
+
+    if lamports_f64 <= 0.0 {
+        return Err(anyhow!(
+            "Amount must be positive. You entered: {} SOL",
+            amount_sol
+        ));
+    }
+
+    if lamports_f64 < 1.0 {
+        return Err(anyhow!(
+            "Amount too small. Must be at least 0.000000001 SOL (1 lamport). You entered: {} SOL",
+            amount_sol
+        ));
+    }
+
+    if lamports_f64 > MAX_LAMPORT_AMOUNT as f64 {
+        let max_sol_amount = MAX_LAMPORT_AMOUNT as f64 / LAMPORTS_PER_SOL as f64;
+        return Err(anyhow!(
+            "Amount too large. Maximum supported: {} SOL",
+            max_sol_amount
+        ));
+    }
+
+    Ok(lamports_f64 as u64)
+}
+
+pub async fn build_transaction<F>(
     ctx: &ScillaContext,
-    destination: &Pubkey,
-    lamports: u64,
-) -> Result<Transaction> {
-    let transfer_instruction = instruction::transfer(ctx.pubkey(), destination, lamports);
+    message_builder: F,
+) -> Result<Transaction>
+where
+    F: FnOnce() -> Message,
+{
     let recent_blockhash = ctx
         .rpc()
         .get_latest_blockhash()
         .await
         .context("Failed to get recent blockhash. Check your RPC connection.")?;
 
-    let message = Message::new(std::slice::from_ref(&transfer_instruction), Some(ctx.pubkey()));
+    let message = message_builder();
     let mut transaction = Transaction::new_unsigned(message);
     transaction.sign(&[ctx.keypair()], recent_blockhash);
 
     Ok(transaction)
 }
 
-pub fn display_transfer_confirmation(
+pub async fn build_transfer_transaction(
     ctx: &ScillaContext,
     destination: &Pubkey,
-    amount_sol: f64,
     lamports: u64,
-    current_balance: u64,
-    actual_fee_lamports: u64,
-) {
-    let actual_fee_sol = lamports_to_sol(actual_fee_lamports);
-
-    println!("\n{}", style("━".repeat(60)).dim());
-    println!("{}", style("Transfer Confirmation").bold().cyan());
-    println!("{}", style("━".repeat(60)).dim());
-    println!(
-        "{:<12} {}",
-        style("From:").bold(),
-        style(ctx.pubkey()).cyan()
-    );
-    println!(
-        "{:<12} {}",
-        style("To:").bold(),
-        style(destination).cyan()
-    );
-    println!(
-        "{:<12} {} SOL ({} lamports)",
-        style("Amount:").bold(),
-        style(amount_sol).green(),
-        style(lamports).dim()
-    );
-    println!(
-        "{:<12} {} SOL",
-        style("Current Balance:").bold(),
-        style(lamports_to_sol(current_balance)).yellow()
-    );
-    println!(
-        "{:<12} {} SOL",
-        style("Fee (actual):").bold(),
-        style(format!("{actual_fee_sol:.9}")).green()
-    );
-    println!(
-        "{:<12} {} SOL",
-        style("Balance after:").bold(),
-        style(lamports_to_sol(current_balance.saturating_sub(lamports).saturating_sub(actual_fee_lamports))).cyan()
-    );
-    println!("{}\n", style("━".repeat(60)).dim());
-}
-
-pub fn get_network_cluster(rpc_url: &str) -> &str {
-    let hostname = if let Some(start) = rpc_url.find("://") {
-        let after_scheme = &rpc_url[start + 3..];
-        if let Some(end) = after_scheme.find('/') {
-            &after_scheme[..end]
-        } else {
-            after_scheme
-        }
-    } else {
-        rpc_url
-    };
-
-    let host_only = if let Some(colon_pos) = hostname.find(':') {
-        &hostname[..colon_pos]
-    } else {
-        hostname
-    };
-
-    if host_only.contains("mainnet-beta") {
-        ""
-    } else if host_only.contains("devnet") {
-        "?cluster=devnet"
-    } else if host_only.contains("testnet") {
-        "?cluster=testnet"
-    } else {
-        "?cluster=custom"
-    }
+) -> Result<Transaction> {
+    let transfer_instruction = instruction::transfer(ctx.pubkey(), destination, lamports);
+    build_transaction(ctx, || {
+        Message::new(std::slice::from_ref(&transfer_instruction), Some(ctx.pubkey()))
+    })
+    .await
 }
 
 pub fn get_explorer_url(signature: impl std::fmt::Display, ctx: &ScillaContext) -> String {
-    let rpc_url = ctx.rpc_url();
-    let network = get_network_cluster(rpc_url);
-    format!("https://explorer.solana.com/tx/{signature}{network}")
+    ScillaConfig::explorer_url_for_cluster(signature, ctx.cluster())
 }
 

@@ -6,8 +6,8 @@ use crate::{
     context::ScillaContext,
     error::ScillaResult,
     misc::{
-        build_transfer_transaction, display_transfer_confirmation, get_explorer_url,
-        lamports_to_sol, validate_amount, validate_balance, validate_transfer_params,
+        helpers::{build_transfer_transaction, checked_sol_to_lamports, get_explorer_url, lamports_to_sol},
+        validation::validate_transfer_params,
     },
     prompt::prompt_data,
     ui::show_spinner,
@@ -81,8 +81,8 @@ async fn request_sol_airdrop(ctx: &ScillaContext) -> anyhow::Result<()> {
     
     let amount_sol: f64 = prompt_data("Enter amount in SOL:")
         .context("Failed to parse amount. Please enter a valid number.")?;
-    
-    let lamports = validate_amount(amount_sol)?;
+
+    let lamports = checked_sol_to_lamports(amount_sol)?;
     
     let sig = ctx.rpc().request_airdrop(ctx.pubkey(), lamports).await;
     match sig {
@@ -164,9 +164,6 @@ async fn simulate_and_validate_transfer(
         .await
         .context("Failed to fetch current balance. Check your RPC connection.")?;
 
-    validate_balance(current_balance, lamports, actual_fee_lamports)
-        .context("Initial balance check failed. Insufficient funds for this transfer.")?;
-
     Ok((current_balance, actual_fee_lamports))
 }
 
@@ -181,21 +178,21 @@ async fn execute_transfer(
     use anyhow::Context;
 
     println!("{}", style("Verifying balance...").dim());
-    let final_balance = ctx
+    let latest_balance = ctx
         .rpc()
         .get_balance(ctx.pubkey())
         .await
         .context("Failed to fetch current balance before sending. Check your RPC connection.")?;
-    
-    validate_balance(final_balance, lamports, actual_fee_lamports)
-        .with_context(|| {
-            format!(
-                "Balance insufficient. Current balance: {} SOL, Required: {} SOL (including {} SOL fee). Balance may have changed since confirmation.",
-                lamports_to_sol(final_balance),
-                lamports_to_sol(lamports.saturating_add(actual_fee_lamports)),
-                lamports_to_sol(actual_fee_lamports)
-            )
-        })?;
+
+    let required_lamports = lamports.saturating_add(actual_fee_lamports);
+    if latest_balance < required_lamports {
+        return Err(anyhow::anyhow!(
+            "Balance insufficient before send. Current balance: {} SOL, Required at least: {} SOL. \
+Balance may have changed since simulation.",
+            lamports_to_sol(latest_balance),
+            lamports_to_sol(required_lamports),
+        ));
+    }
 
     println!("{}", style("Sending transaction...").dim());
 
@@ -257,16 +254,45 @@ async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
     let (current_balance, actual_fee_lamports) =
         simulate_and_validate_transfer(ctx, &destination, lamports).await?;
 
-    display_transfer_confirmation(
-        ctx,
-        &destination,
-        amount_sol,
-        lamports,
-        current_balance,
-        actual_fee_lamports,
+    let fee_sol = lamports_to_sol(actual_fee_lamports);
+    let current_balance_sol = lamports_to_sol(current_balance);
+    let estimated_balance_after =
+        current_balance.saturating_sub(lamports).saturating_sub(actual_fee_lamports);
+    let estimated_balance_after_sol = lamports_to_sol(estimated_balance_after);
+
+    println!("\n{}", style("Transfer summary").bold().cyan());
+    println!(
+        "{:<15} {}",
+        style("From:").bold(),
+        style(ctx.pubkey()).cyan()
+    );
+    println!(
+        "{:<15} {}",
+        style("To:").bold(),
+        style(destination).cyan()
+    );
+    println!(
+        "{:<15} {} SOL",
+        style("Amount:").bold(),
+        style(format!("{amount_sol:.9}")).green()
+    );
+    println!(
+        "{:<15} {} SOL",
+        style("Current balance:").bold(),
+        style(format!("{current_balance_sol:.9}")).yellow()
+    );
+    println!(
+        "{:<15} {} SOL",
+        style("Estimated fee:").bold(),
+        style(format!("{fee_sol:.9}")).green()
+    );
+    println!(
+        "{:<15} {} SOL",
+        style("Estimated after:").bold(),
+        style(format!("{estimated_balance_after_sol:.9}")).cyan()
     );
 
-    let confirmed = Confirm::new("Confirm transfer?")
+    let confirmed = Confirm::new("Send transaction?")
         .with_default(false)
         .prompt()?;
 
@@ -283,7 +309,7 @@ async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::misc::{get_network_cluster, validate_balance, validate_transfer_params};
+    use crate::misc::validation::validate_transfer_params;
     use std::str::FromStr;
     use solana_pubkey::Pubkey;
 
@@ -293,80 +319,6 @@ mod tests {
 
     fn test_recipient() -> Pubkey {
         Pubkey::from_str("11111111111111111111111111111113").unwrap()
-    }
-
-    #[test]
-    fn test_network_cluster_mainnet() {
-        assert_eq!(get_network_cluster("https://api.mainnet-beta.solana.com"), "");
-        assert_eq!(get_network_cluster("https://rpc.mainnet-beta.solana.com"), "");
-    }
-
-    #[test]
-    fn test_network_cluster_devnet() {
-        assert_eq!(
-            get_network_cluster("https://api.devnet.solana.com"),
-            "?cluster=devnet"
-        );
-    }
-
-    #[test]
-    fn test_network_cluster_testnet() {
-        assert_eq!(
-            get_network_cluster("https://api.testnet.solana.com"),
-            "?cluster=testnet"
-        );
-    }
-
-    #[test]
-    fn test_network_cluster_custom() {
-        assert_eq!(
-            get_network_cluster("https://custom-rpc.example.com"),
-            "?cluster=custom"
-        );
-        assert_eq!(
-            get_network_cluster("http://localhost:8899"),
-            "?cluster=custom"
-        );
-    }
-
-    #[test]
-    fn test_explorer_url_format() {
-        let sig = "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
-
-        let mainnet_url = format!("https://explorer.solana.com/tx/{}{}", sig, get_network_cluster("https://api.mainnet-beta.solana.com"));
-        assert_eq!(mainnet_url, format!("https://explorer.solana.com/tx/{sig}"));
-
-        let devnet_url = format!("https://explorer.solana.com/tx/{}{}", sig, get_network_cluster("https://api.devnet.solana.com"));
-        assert_eq!(devnet_url, format!("https://explorer.solana.com/tx/{sig}?cluster=devnet"));
-    }
-
-
-
-    #[test]
-    fn test_network_cluster_edge_cases() {
-        assert_eq!(
-            get_network_cluster("https://my-custom-rpc.com/mainnet-beta/path"),
-            "?cluster=custom" // Hostname is my-custom-rpc.com, not mainnet-beta
-        );
-
-        assert_eq!(
-            get_network_cluster("https://api.devnet.solana.com:8080"),
-            "?cluster=devnet"
-        );
-
-        assert_eq!(
-            get_network_cluster("localhost:8899"),
-            "?cluster=custom"
-        );
-
-        assert_eq!(
-            get_network_cluster("https://api.mainnet-beta.solana.com"),
-            ""
-        );
-        assert_eq!(
-            get_network_cluster("https://rpc.mainnet-beta.solana.com"),
-            ""
-        );
     }
 
     #[test]
@@ -460,67 +412,6 @@ mod tests {
             assert!(result.is_ok(), "Failed for amount {}", amount_sol);
             assert_eq!(result.unwrap(), expected_lamports, "Wrong conversion for {}", amount_sol);
         }
-    }
-
-    #[test]
-    fn test_validate_balance_sufficient() {
-        let balance = 2_000_000_000; 
-        let transfer = 1_000_000_000; 
-        let fee = 5_000; 
-
-        let result = validate_balance(balance, transfer, fee);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_balance_exact_sufficient() {
-        let balance = 1_000_005_000; 
-        let transfer = 1_000_000_000; 
-        let fee = 5_000; 
-
-        let result = validate_balance(balance, transfer, fee);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_balance_insufficient() {
-        let balance = 500_000_000; 
-        let transfer = 1_000_000_000; 
-        let fee = 5_000; 
-
-        let result = validate_balance(balance, transfer, fee);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Insufficient balance"));
-    }
-
-    #[test]
-    fn test_validate_balance_insufficient_with_large_fee() {
-        let balance = 1_000_010_000; 
-        let transfer = 1_000_000_000; 
-        let fee = 20_000; 
-
-        let result = validate_balance(balance, transfer, fee);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Insufficient balance"));
-    }
-
-    #[test]
-    fn test_validate_balance_zero_balance() {
-        let balance = 0;
-        let transfer = 1_000_000;
-        let fee = 5_000;
-
-        let result = validate_balance(balance, transfer, fee);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_balance_saturating_add_prevents_overflow() {
-        let balance = u64::MAX;
-        let transfer = u64::MAX / 2;
-        let fee = u64::MAX / 2;
-        let result = validate_balance(balance, transfer, fee);
-        assert!(result.is_ok(), "Should handle overflow gracefully without panicking");
     }
 
 }
