@@ -19,6 +19,7 @@ pub enum ConfigCommand {
     Show,
     Generate,
     Edit,
+    GoBack,
 }
 
 impl ConfigCommand {
@@ -27,6 +28,7 @@ impl ConfigCommand {
             ConfigCommand::Show => "Show current config",
             ConfigCommand::Generate => "Generate new config",
             ConfigCommand::Edit => "Edit config",
+            ConfigCommand::GoBack => "Go back",
         }
     }
 }
@@ -42,6 +44,9 @@ impl ConfigCommand {
             }
             ConfigCommand::Edit => {
                 edit_config().await?;
+            }
+            ConfigCommand::GoBack => {
+                return Ok(CommandExec::GoBack);
             }
         };
 

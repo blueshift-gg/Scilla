@@ -152,6 +152,7 @@ fn prompt_config() -> anyhow::Result<ConfigCommand> {
             "Show ScillaConfig",
             "Generate ScillaConfig",
             "Edit ScillaConfig",
+            "Go back",
         ],
     )
     .prompt()?;
@@ -160,6 +161,7 @@ fn prompt_config() -> anyhow::Result<ConfigCommand> {
         "Show ScillaConfig" => ConfigCommand::Show,
         "Generate ScillaConfig" => ConfigCommand::Generate,
         "Edit ScillaConfig" => ConfigCommand::Edit,
+        "Go back" => ConfigCommand::GoBack,
         _ => unreachable!(),
     })
 }
