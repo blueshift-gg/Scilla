@@ -148,7 +148,12 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
 fn prompt_config() -> anyhow::Result<ConfigCommand> {
     let choice = Select::new(
         "ScillaConfig Command:",
-        vec!["Show ScillaConfig", "Set ScillaConfig", "Edit ScillaConfig"],
+        vec![
+            "Show ScillaConfig",
+            "Generate ScillaConfig",
+            "Edit ScillaConfig",
+            "Go back",
+        ],
     )
     .prompt()?;
 
@@ -156,6 +161,7 @@ fn prompt_config() -> anyhow::Result<ConfigCommand> {
         "Show ScillaConfig" => ConfigCommand::Show,
         "Generate ScillaConfig" => ConfigCommand::Generate,
         "Edit ScillaConfig" => ConfigCommand::Edit,
+        "Go back" => ConfigCommand::GoBack,
         _ => unreachable!(),
     })
 }
