@@ -47,7 +47,7 @@ impl Command {
             Command::Stake(stake_command) => stake_command.process_command(ctx).await,
             Command::Account(account_command) => account_command.process_command(ctx).await,
             Command::Vote(_vote_command) => todo!(),
-            Command::ScillaConfig(_config_command) => todo!(),
+            Command::ScillaConfig(config_command) => config_command.process_command(ctx).await,
             Command::Exit => Ok(CommandExec::Exit),
         }
     }
