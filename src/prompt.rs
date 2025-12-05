@@ -3,8 +3,10 @@ use {
         Command, account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
         stake::StakeCommand, vote::VoteCommand,
     },
-    inquire::{Select, Text},
-    std::str::FromStr,
+    ::{
+        inquire::{Select, Text},
+        std::str::FromStr,
+    },
 };
 
 pub fn prompt_for_command() -> anyhow::Result<Command> {
@@ -52,13 +54,13 @@ fn prompt_cluster() -> anyhow::Result<ClusterCommand> {
     .prompt()?;
 
     Ok(match choice {
-        "Epoch Info" => ClusterCommand::Epoch,
-        "Current Slot" => ClusterCommand::Slot,
+        "Epoch Info" => ClusterCommand::EpochInfo,
+        "Current Slot" => ClusterCommand::CurrentSlot,
         "Block Height" => ClusterCommand::BlockHeight,
         "Block Time" => ClusterCommand::BlockTime,
         "Validators" => ClusterCommand::Validators,
         "Cluster Version" => ClusterCommand::ClusterVersion,
-        "Supply Info" => ClusterCommand::Supply,
+        "Supply Info" => ClusterCommand::SupplyInfo,
         "Inflation" => ClusterCommand::Inflation,
         "Go Back" => ClusterCommand::GoBack,
         _ => unreachable!(),
@@ -69,28 +71,28 @@ fn prompt_stake() -> anyhow::Result<StakeCommand> {
     let choice = Select::new(
         "Stake Command:",
         vec![
-            "Create Stake Account",
-            "Delegate Stake",
-            "Deactivate Stake",
-            "Withdraw Stake",
-            "Merge Stake",
-            "Split Stake",
-            "Show Stake Account",
-            "Stake History",
+            "Create",
+            "Delegate",
+            "Deactivate",
+            "Withdraw",
+            "Merge",
+            "Split",
+            "Show",
+            "History",
             "Go Back",
         ],
     )
     .prompt()?;
 
     Ok(match choice {
-        "Create Stake Account" => StakeCommand::Create,
-        "Delegate Stake" => StakeCommand::Delegate,
-        "Deactivate Stake" => StakeCommand::Deactivate,
-        "Withdraw Stake" => StakeCommand::Withdraw,
-        "Merge Stake" => StakeCommand::Merge,
-        "Split Stake" => StakeCommand::Split,
-        "Show Stake Account" => StakeCommand::Show,
-        "Stake History" => StakeCommand::History,
+        "Create" => StakeCommand::Create,
+        "Delegate" => StakeCommand::Delegate,
+        "Deactivate" => StakeCommand::Deactivate,
+        "Withdraw" => StakeCommand::Withdraw,
+        "Merge" => StakeCommand::Merge,
+        "Split" => StakeCommand::Split,
+        "Show" => StakeCommand::Show,
+        "History" => StakeCommand::History,
         "Go Back" => StakeCommand::GoBack,
         _ => unreachable!(),
     })
@@ -100,26 +102,26 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
     let choice = Select::new(
         "Account Command:",
         vec![
-            "Fetch Account info",
-            "Get Account Balance",
-            "Transfer SOL",
-            "Request Airdrop",
-            "Confirm a pending transaction",
-            "Fetch cluster’s largest accounts",
-            "Inspect or manage Nonce accounts",
+            "Fetch Account",
+            "Balance",
+            "Transfer",
+            "Airdrop",
+            "Confirm Transaction",
+            "Largest Accounts",
+            "Nonce Account",
             "Go Back",
         ],
     )
     .prompt()?;
 
     Ok(match choice {
-        "Fetch Account info" => AccountCommand::Fetch,
-        "Get Account Balance" => AccountCommand::Balance,
-        "Transfer SOL" => AccountCommand::Transfer,
-        "Request Airdrop" => AccountCommand::Airdrop,
-        "Confirm a pending transaction" => AccountCommand::ConfirmTransaction,
-        "Fetch cluster’s largest accounts" => AccountCommand::LargestAccounts,
-        "Inspect or manage Nonce accounts" => AccountCommand::NonceAccount,
+        "Fetch Account" => AccountCommand::FetchAccount,
+        "Balance" => AccountCommand::Balance,
+        "Transfer" => AccountCommand::Transfer,
+        "Airdrop" => AccountCommand::Airdrop,
+        "Confirm Transaction" => AccountCommand::ConfirmTransaction,
+        "Largest Accounts" => AccountCommand::LargestAccounts,
+        "Nonce Account" => AccountCommand::NonceAccount,
         "Go Back" => AccountCommand::GoBack,
         _ => unreachable!(),
     })
@@ -131,8 +133,9 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
         vec![
             "Create Vote Account",
             "Authorize Voter",
-            "Authorize Withdrawer",
+            "Withdraw from Vote",
             "Show Vote Account",
+            "Go Back",
         ],
     )
     .prompt()?;
@@ -140,7 +143,9 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
     Ok(match choice {
         "Create Vote Account" => VoteCommand::CreateVoteAccount,
         "Authorize Voter" => VoteCommand::AuthorizeVoter,
+        "Withdraw from Vote" => VoteCommand::WithdrawFromVote,
         "Show Vote Account" => VoteCommand::ShowVoteAccount,
+        "Go Back" => VoteCommand::GoBack,
         _ => unreachable!(),
     })
 }
@@ -148,14 +153,20 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
 fn prompt_config() -> anyhow::Result<ConfigCommand> {
     let choice = Select::new(
         "ScillaConfig Command:",
-        vec!["Show ScillaConfig", "Set ScillaConfig", "Edit ScillaConfig"],
+        vec![
+            "Show ScillaConfig",
+            "Set ScillaConfig",
+            "Edit ScillaConfig",
+            "Go Back",
+        ],
     )
     .prompt()?;
 
     Ok(match choice {
         "Show ScillaConfig" => ConfigCommand::Show,
-        "Generate ScillaConfig" => ConfigCommand::Generate,
+        "Set ScillaConfig" => ConfigCommand::Generate,
         "Edit ScillaConfig" => ConfigCommand::Edit,
+        "Go Back" => ConfigCommand::GoBack,
         _ => unreachable!(),
     })
 }

@@ -3,20 +3,22 @@ use {
         commands::CommandExec, constants::LAMPORTS_PER_SOL, context::ScillaContext,
         error::ScillaResult, ui::show_spinner,
     },
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
-    console::style,
-    std::ops::Div,
+    ::{
+        comfy_table::{Cell, Table, presets::UTF8_FULL},
+        console::style,
+        std::ops::Div,
+    },
 };
 
 /// Commands related to cluster operations
 #[derive(Debug, Clone)]
 pub enum ClusterCommand {
-    Epoch,
-    Slot,
+    EpochInfo,
+    CurrentSlot,
     BlockHeight,
     BlockTime,
     Validators,
-    Supply,
+    SupplyInfo,
     Inflation,
     ClusterVersion,
     GoBack,
@@ -25,14 +27,14 @@ pub enum ClusterCommand {
 impl ClusterCommand {
     pub fn description(&self) -> &'static str {
         match self {
-            ClusterCommand::Epoch => "Get Epoch Info",
-            ClusterCommand::Slot => "Get Current Slot",
-            ClusterCommand::BlockHeight => "Get Block Height",
-            ClusterCommand::BlockTime => "Get Block Time",
-            ClusterCommand::Validators => "Get Validators",
-            ClusterCommand::Supply => "Get Supply Info",
-            ClusterCommand::Inflation => "Get Inflation Info",
-            ClusterCommand::ClusterVersion => "Get Cluster Version",
+            ClusterCommand::EpochInfo => "Current epoch and progress",
+            ClusterCommand::CurrentSlot => "Latest confirmed slot",
+            ClusterCommand::BlockHeight => "Current block height",
+            ClusterCommand::BlockTime => "Timestamp for a specific block",
+            ClusterCommand::Validators => "List active validators",
+            ClusterCommand::ClusterVersion => "Solana version running on cluster",
+            ClusterCommand::SupplyInfo => "Total and circulating supply",
+            ClusterCommand::Inflation => "Current inflation parameters",
             ClusterCommand::GoBack => "Go back",
         }
     }
@@ -41,10 +43,10 @@ impl ClusterCommand {
 impl ClusterCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
         match self {
-            ClusterCommand::Epoch => {
+            ClusterCommand::EpochInfo => {
                 show_spinner(self.description(), fetch_epoch_info(ctx)).await?;
             }
-            ClusterCommand::Slot => {
+            ClusterCommand::CurrentSlot => {
                 show_spinner(self.description(), fetch_current_slot(ctx)).await?;
             }
             ClusterCommand::BlockHeight => {
@@ -56,7 +58,7 @@ impl ClusterCommand {
             ClusterCommand::Validators => {
                 show_spinner(self.description(), fetch_validators(ctx)).await?;
             }
-            ClusterCommand::Supply => {
+            ClusterCommand::SupplyInfo => {
                 show_spinner(self.description(), fetch_supply_info(ctx)).await?;
             }
             ClusterCommand::Inflation => {
@@ -68,7 +70,7 @@ impl ClusterCommand {
             ClusterCommand::GoBack => {
                 return Ok(CommandExec::GoBack);
             }
-        };
+        }
 
         Ok(CommandExec::Process(()))
     }
