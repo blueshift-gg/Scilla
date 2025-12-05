@@ -80,6 +80,24 @@ pub async fn build_transfer_transaction(
     .await
 }
 
+pub async fn execute_transaction(
+    ctx: &ScillaContext,
+    transaction: &Transaction,
+    error_msg: Option<&str>,
+) -> Result<String> {
+    let signature = ctx
+        .rpc()
+        .send_and_confirm_transaction(transaction)
+        .await
+        .with_context(|| {
+            error_msg
+                .map(|msg| msg.to_string())
+                .unwrap_or_else(|| "Transaction failed".to_string())
+        })?;
+
+    Ok(signature.to_string())
+}
+
 pub fn get_explorer_url(signature: impl std::fmt::Display, ctx: &ScillaContext) -> String {
     ScillaConfig::explorer_url_for_cluster(signature, ctx.cluster())
 }

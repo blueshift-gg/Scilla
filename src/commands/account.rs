@@ -1,4 +1,6 @@
+use anyhow::Context;
 use console::style;
+use inquire::Confirm;
 use solana_pubkey::Pubkey;
 
 use crate::{
@@ -6,7 +8,7 @@ use crate::{
     context::ScillaContext,
     error::ScillaResult,
     misc::{
-        helpers::{build_transfer_transaction, checked_sol_to_lamports, get_explorer_url, lamports_to_sol},
+        helpers::{build_transfer_transaction, checked_sol_to_lamports, execute_transaction, lamports_to_sol},
         validation::validate_transfer_params,
     },
     prompt::prompt_data,
@@ -77,8 +79,6 @@ impl AccountCommand {
 }
 
 async fn request_sol_airdrop(ctx: &ScillaContext) -> anyhow::Result<()> {
-    use anyhow::Context;
-    
     let amount_sol: f64 = prompt_data("Enter amount in SOL:")
         .context("Failed to parse amount. Please enter a valid number.")?;
 
@@ -131,52 +131,14 @@ async fn fetch_account_balance(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::
     Ok(())
 }
 
-async fn simulate_and_validate_transfer(
-    ctx: &ScillaContext,
-    destination: &Pubkey,
-    lamports: u64,
-) -> anyhow::Result<(u64, u64)> {
-    use anyhow::Context;
-
-    println!("\n{}", style("━".repeat(60)).dim());
-    println!("{}", style("Simulating transaction...").dim());
-
-    let test_transaction = build_transfer_transaction(ctx, destination, lamports).await?;
-
-    let simulation_result = ctx
-        .rpc()
-        .simulate_transaction(&test_transaction)
-        .await
-        .context("Failed to simulate transaction. Check your RPC connection.")?;
-
-    const FALLBACK_FEE_LAMPORTS: u64 = 5_000;
-    let actual_fee_lamports = simulation_result.value.fee.unwrap_or(FALLBACK_FEE_LAMPORTS);
-
-    if let Some(err) = &simulation_result.value.err {
-        return Err(anyhow::anyhow!(
-            "Transaction simulation failed: {err:?}"
-        ));
-    }
-
-    let current_balance = ctx
-        .rpc()
-        .get_balance(ctx.pubkey())
-        .await
-        .context("Failed to fetch current balance. Check your RPC connection.")?;
-
-    Ok((current_balance, actual_fee_lamports))
-}
-
-
 async fn execute_transfer(
     ctx: &ScillaContext,
     destination: &Pubkey,
     lamports: u64,
     amount_sol: f64,
-    actual_fee_lamports: u64,
 ) -> anyhow::Result<()> {
-    use anyhow::Context;
-
+    const FALLBACK_FEE_LAMPORTS: u64 = 5_000;
+    
     println!("{}", style("Verifying balance...").dim());
     let latest_balance = ctx
         .rpc()
@@ -184,7 +146,7 @@ async fn execute_transfer(
         .await
         .context("Failed to fetch current balance before sending. Check your RPC connection.")?;
 
-    let required_lamports = lamports.saturating_add(actual_fee_lamports);
+    let required_lamports = lamports.saturating_add(FALLBACK_FEE_LAMPORTS);
     if latest_balance < required_lamports {
         return Err(anyhow::anyhow!(
             "Balance insufficient before send. Current balance: {} SOL, Required at least: {} SOL. \
@@ -198,22 +160,11 @@ Balance may have changed since simulation.",
 
     let transaction = build_transfer_transaction(ctx, destination, lamports).await?;
 
-    let signature = ctx
-        .rpc()
-        .send_and_confirm_transaction(&transaction)
-        .await
-        .with_context(|| {
-            format!(
-                "Transaction failed. Transfer of {amount_sol} SOL from {} to {} could not be completed. Please check your balance and try again.",
-                ctx.pubkey(), destination
-            )
-        })?;
-    
-    let new_balance = ctx
-        .rpc()
-        .get_balance(ctx.pubkey())
-        .await
-        .context("Transfer succeeded but failed to fetch updated balance.")?;
+    let error_msg = format!(
+        "Transaction failed. Transfer of {amount_sol} SOL from {} to {} could not be completed. Please check your balance and try again.",
+        ctx.pubkey(), destination
+    );
+    let signature = execute_transaction(ctx, &transaction, Some(&error_msg)).await?;
 
     println!("\n{}", style("Transfer successful!").green().bold());
     println!(
@@ -222,27 +173,11 @@ Balance may have changed since simulation.",
         style(&signature).cyan()
     );
 
-    let explorer_url = get_explorer_url(&signature, ctx);
-    println!(
-        "{:<15} {}",
-        style("Explorer:").bold(),
-        style(&explorer_url).cyan().underlined()
-    );
-
-    println!(
-        "{:<15} {} SOL",
-        style("New Balance:").bold(),
-        style(format!("{:.9}", lamports_to_sol(new_balance))).green()
-    );
-
     Ok(())
 }
 
 
 async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use inquire::Confirm;
-
     let destination: Pubkey = prompt_data("Enter destination address:")
         .context("Failed to parse destination address. Please enter a valid Solana pubkey.")?;
 
@@ -250,47 +185,6 @@ async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
         .context("Failed to parse amount. Please enter a valid number.")?;
 
     let lamports = validate_transfer_params(ctx.pubkey(), &destination, amount_sol)?;
-
-    let (current_balance, actual_fee_lamports) =
-        simulate_and_validate_transfer(ctx, &destination, lamports).await?;
-
-    let fee_sol = lamports_to_sol(actual_fee_lamports);
-    let current_balance_sol = lamports_to_sol(current_balance);
-    let estimated_balance_after =
-        current_balance.saturating_sub(lamports).saturating_sub(actual_fee_lamports);
-    let estimated_balance_after_sol = lamports_to_sol(estimated_balance_after);
-
-    println!("\n{}", style("Transfer summary").bold().cyan());
-    println!(
-        "{:<15} {}",
-        style("From:").bold(),
-        style(ctx.pubkey()).cyan()
-    );
-    println!(
-        "{:<15} {}",
-        style("To:").bold(),
-        style(destination).cyan()
-    );
-    println!(
-        "{:<15} {} SOL",
-        style("Amount:").bold(),
-        style(format!("{amount_sol:.9}")).green()
-    );
-    println!(
-        "{:<15} {} SOL",
-        style("Current balance:").bold(),
-        style(format!("{current_balance_sol:.9}")).yellow()
-    );
-    println!(
-        "{:<15} {} SOL",
-        style("Estimated fee:").bold(),
-        style(format!("{fee_sol:.9}")).green()
-    );
-    println!(
-        "{:<15} {} SOL",
-        style("Estimated after:").bold(),
-        style(format!("{estimated_balance_after_sol:.9}")).cyan()
-    );
 
     let confirmed = Confirm::new("Send transaction?")
         .with_default(false)
@@ -301,7 +195,7 @@ async fn transfer_sol(ctx: &ScillaContext) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    execute_transfer(ctx, &destination, lamports, amount_sol, actual_fee_lamports).await?;
+    execute_transfer(ctx, &destination, lamports, amount_sol).await?;
 
     Ok(())
 }
