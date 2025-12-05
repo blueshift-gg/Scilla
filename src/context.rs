@@ -10,6 +10,7 @@ pub struct ScillaContext {
     rpc_client: RpcClient,
     keypair: Keypair,
     pubkey: Pubkey,
+    cluster: Option<String>,
 }
 
 impl ScillaContext {
@@ -24,12 +25,16 @@ impl ScillaContext {
     pub fn pubkey(&self) -> &Pubkey {
         &self.pubkey
     }
+
+    pub fn cluster(&self) -> Option<&str> {
+        self.cluster.as_deref()
+    }
 }
 
 impl ScillaContext {
     pub fn from_config(config: ScillaConfig) -> anyhow::Result<Self> {
         let rpc_client = RpcClient::new_with_commitment(
-            config.rpc_url,
+            config.rpc_url.clone(),
             CommitmentConfig {
                 commitment: config.commitment_level,
             },
@@ -51,6 +56,7 @@ impl ScillaContext {
             rpc_client,
             keypair,
             pubkey,
+            cluster: config.cluster,
         })
     }
 }
