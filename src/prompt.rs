@@ -133,6 +133,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
             "Authorize Voter",
             "Authorize Withdrawer",
             "Show Vote Account",
+            "Go Back",
         ],
     )
     .prompt()?;
@@ -140,7 +141,9 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
     Ok(match choice {
         "Create Vote Account" => VoteCommand::CreateVoteAccount,
         "Authorize Voter" => VoteCommand::AuthorizeVoter,
+        "Authorize Withdrawer" => VoteCommand::WithdrawFromVoteAccount,
         "Show Vote Account" => VoteCommand::ShowVoteAccount,
+        "Go Back" => VoteCommand::GoBack,
         _ => unreachable!(),
     })
 }
