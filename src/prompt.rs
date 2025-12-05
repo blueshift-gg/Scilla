@@ -46,6 +46,7 @@ fn prompt_cluster() -> anyhow::Result<ClusterCommand> {
             "Cluster Version",
             "Supply Info",
             "Inflation",
+            "Go Back",
         ],
     )
     .prompt()?;
@@ -59,6 +60,7 @@ fn prompt_cluster() -> anyhow::Result<ClusterCommand> {
         "Cluster Version" => ClusterCommand::ClusterVersion,
         "Supply Info" => ClusterCommand::Supply,
         "Inflation" => ClusterCommand::Inflation,
+        "Go Back" => ClusterCommand::GoBack,
         _ => unreachable!(),
     })
 }

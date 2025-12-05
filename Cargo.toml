@@ -23,3 +23,5 @@ solana-pubkey = "4.0.0"
 solana-transaction = "3.0.2"
 solana-message = "3.0.1"
 solana-system-interface = { version = "2.0.0", features = ["bincode"] }
+chrono = "0.4"
+comfy-table = "7.1"
