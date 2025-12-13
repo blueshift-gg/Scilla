@@ -1,11 +1,16 @@
+use anyhow::anyhow;
+use solana_keypair::{EncodableKey, Keypair, Signer};
+use solana_sdk::{message::Message, transaction::Transaction};
+use solana_vote_program::{
+    vote_instruction::{self, CreateVoteAccountConfig},
+    vote_state::{VoteInit, VoteStateV4},
+};
+use std::path::PathBuf;
 use {
     crate::{
-        commands::CommandExec, context::ScillaContext, error::ScillaResult, prompt::prompt_data,
-        ui::show_spinner,
+        ScillaContext, ScillaResult, commands::CommandExec, prompt::prompt_data, ui::show_spinner,
     },
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
-    console::style,
-    solana_pubkey::Pubkey,
+    ::console::style,
 };
 
 /// Commands related to validator/vote account operations
@@ -120,8 +125,157 @@ async fn show_vote_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Resu
                 style("⚠").yellow(),
                 style(pubkey).cyan()
             );
+impl VoteCommand {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
+        match self {
+            VoteCommand::CreateVoteAccount => {
+                let account_keypair_path: PathBuf = prompt_data("Enter Account Keypair:")?;
+                let identity_keypair_path: PathBuf = prompt_data("Enter Identity Keypair:")?;
+                let withdraw_keypair_path: PathBuf = prompt_data("Enter Withdraw Keypair:")?;
+
+                let account_keypair =
+                    Keypair::read_from_file(&account_keypair_path).map_err(|e| {
+                        anyhow!(
+                            "Failed to read keypair from {:?}, {}",
+                            account_keypair_path,
+                            e
+                        )
+                    })?;
+
+                let identity_keypair =
+                    Keypair::read_from_file(&identity_keypair_path).map_err(|e| {
+                        anyhow!(
+                            "Failed to read keypair from {:?}, {}",
+                            identity_keypair_path,
+                            e
+                        )
+                    })?;
+
+                let withdraw_keypair =
+                    Keypair::read_from_file(&withdraw_keypair_path).map_err(|e| {
+                        anyhow!(
+                            "Failed to read keypair from {:?}, {}",
+                            withdraw_keypair_path,
+                            e
+                        )
+                    })?;
+
+                show_spinner(
+                    self.description(),
+                    create_vote_account(
+                        ctx,
+                        &account_keypair,
+                        &identity_keypair,
+                        &withdraw_keypair,
+                    ),
+                )
+                .await?;
+            }
+            VoteCommand::AuthorizeVoter => todo!(),
+            VoteCommand::WithdrawFromVote => todo!(),
+            VoteCommand::ShowVoteAccount => todo!(),
+            VoteCommand::GoBack => {
+                return Ok(CommandExec::GoBack);
+            }
         }
+
+        Ok(CommandExec::Process(()))
     }
+
+    Ok(())
+}
+
+async fn create_vote_account(
+    ctx: &ScillaContext,
+    vote_account_keypair: &Keypair,
+    identity_keypair: &Keypair,
+    authorized_withdrawer: &Keypair,
+) -> anyhow::Result<()> {
+    let vote_account_pubkey = vote_account_keypair.pubkey();
+    let identity_pubkey = identity_keypair.pubkey();
+    let withdrawer_pubkey = authorized_withdrawer.pubkey();
+    let fee_payer_pubkey = ctx.pubkey();
+
+    if fee_payer_pubkey == &vote_account_pubkey {
+        return Err(anyhow!(
+            "Fee payer {} cannot be the same as vote account {}",
+            fee_payer_pubkey,
+            vote_account_pubkey
+        ));
+    }
+    if vote_account_pubkey == identity_pubkey {
+        return Err(anyhow!(
+            "Vote account {} cannot be the same as identity {}",
+            vote_account_pubkey,
+            identity_pubkey
+        ));
+    }
+
+    // checking if vote account already exists
+    if let Ok(response) = ctx.rpc().get_account(&vote_account_pubkey).await {
+        let err_msg = if response.owner == solana_vote_program::id() {
+            format!("Vote account {} already exists", vote_account_pubkey)
+        } else {
+            format!(
+                "Account {} already exists and is not a vote account",
+                vote_account_pubkey
+            )
+        };
+        return Err(anyhow!(err_msg));
+    }
+
+    // min rent check
+    let required_balance = ctx
+        .rpc()
+        .get_minimum_balance_for_rent_exemption(VoteStateV4::size_of())
+        .await?
+        .max(1);
+
+    let fee_payer_balance = ctx.rpc().get_balance(fee_payer_pubkey).await?;
+    if fee_payer_balance < required_balance {
+        return Err(anyhow!(
+            "Insufficient balance. Fee payer has {} lamports, need at least {} lamports (~{:.4} SOL)",
+            fee_payer_balance,
+            required_balance,
+            required_balance as f64 / 1_000_000_000.0
+        ));
+    }
+
+    let vote_init = VoteInit {
+        node_pubkey: identity_pubkey,
+        authorized_voter: identity_pubkey, // defaults to identity
+        authorized_withdrawer: withdrawer_pubkey,
+        commission: 0, // TODO: prompt for this
+    };
+
+    let instructions = vote_instruction::create_account_with_config(
+        fee_payer_pubkey,
+        &vote_account_pubkey,
+        &vote_init,
+        required_balance,
+        CreateVoteAccountConfig::default(),
+    );
+
+    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
+    let message = Message::new(&instructions, Some(fee_payer_pubkey));
+    let mut tx = Transaction::new_unsigned(message);
+
+    let signers: Vec<&dyn Signer> = vec![ctx.keypair(), vote_account_keypair, identity_keypair];
+
+    tx.try_sign(&signers, recent_blockhash)?;
+
+    let signature = ctx.rpc().send_and_confirm_transaction(&tx).await?;
+
+    println!(
+        "{} {}",
+        style("Vote account created successfully!").green().bold(),
+        style(format!("Signature: {signature}")).cyan()
+    );
+    println!(
+        "{} {}",
+        style("Vote account address:").green(),
+        style(vote_account_pubkey).cyan()
+    );
 
     Ok(())
 }
