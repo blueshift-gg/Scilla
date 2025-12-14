@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use solana_keypair::{EncodableKey, Keypair, Signer};
+use solana_pubkey::Pubkey;
 use solana_sdk::{message::Message, transaction::Transaction};
 use solana_vote_program::{
     vote_instruction::{self, CreateVoteAccountConfig},
@@ -173,7 +174,14 @@ impl VoteCommand {
             }
             VoteCommand::AuthorizeVoter => todo!(),
             VoteCommand::WithdrawFromVote => todo!(),
-            VoteCommand::ShowVoteAccount => todo!(),
+            VoteCommand::ShowVoteAccount => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                show_spinner(
+                    self.description(),
+                    get_vote_account(ctx, &vote_account_pubkey),
+                )
+                .await?;
+            }
             VoteCommand::GoBack => {
                 return Ok(CommandExec::GoBack);
             }
@@ -275,6 +283,76 @@ async fn create_vote_account(
         "{} {}",
         style("Vote account address:").green(),
         style(vote_account_pubkey).cyan()
+    );
+
+    Ok(())
+}
+
+async fn get_vote_account(ctx: &ScillaContext, vote_account_pubkey: &Pubkey) -> anyhow::Result<()> {
+    let vote_account = ctx
+        .rpc()
+        .get_account(vote_account_pubkey)
+        .await
+        .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
+
+    if vote_account.owner != solana_vote_program::id() {
+        return Err(anyhow!("{} is not a vote account", vote_account_pubkey));
+    }
+
+    let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
+        .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
+
+    let balance_sol = vote_account.lamports as f64 / 1_000_000_000.0;
+
+    let root_slot = match vote_state.root_slot {
+        Some(slot) => slot.to_string(),
+        None => "~".to_string(),
+    };
+
+    let timestamp = chrono::DateTime::from_timestamp(vote_state.last_timestamp.timestamp, 0)
+        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+
+    println!(
+        "{} {} SOL",
+        style("Account Balance:").green().bold(),
+        balance_sol
+    );
+    println!(
+        "{} {}",
+        style("Validator Identity:").green().bold(),
+        vote_state.node_pubkey
+    );
+    println!(
+        "{} {}",
+        style("Vote Authority:").green().bold(),
+        vote_state
+            .authorized_voters
+            .last()
+            .map(|(_, v)| v)
+            .unwrap_or(&vote_state.node_pubkey)
+    );
+    println!(
+        "{} {}",
+        style("Withdraw Authority:").green().bold(),
+        vote_state.authorized_withdrawer
+    );
+    println!(
+        "{} {}",
+        style("Credits:").green().bold(),
+        vote_state.credits()
+    );
+    println!(
+        "{} {}%",
+        style("Commission:").green().bold(),
+        vote_state.inflation_rewards_commission_bps / 100
+    );
+    println!("{} {}", style("Root Slot:").green().bold(), root_slot);
+    println!(
+        "{} {} from slot {}",
+        style("Recent Timestamp:").green().bold(),
+        timestamp,
+        vote_state.last_timestamp.slot
     );
 
     Ok(())
