@@ -4,7 +4,7 @@ use solana_pubkey::Pubkey;
 use solana_sdk::{message::Message, transaction::Transaction};
 use solana_vote_program::{
     vote_instruction::{self, CreateVoteAccountConfig},
-    vote_state::{VoteInit, VoteStateV4},
+    vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
 };
 use std::path::PathBuf;
 use {
@@ -172,7 +172,31 @@ impl VoteCommand {
                 )
                 .await?;
             }
-            VoteCommand::AuthorizeVoter => todo!(),
+            VoteCommand::AuthorizeVoter => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                let authorized_keypair_path: PathBuf = prompt_data("Enter Authorized Keypair:")?;
+                let new_authorized_pubkey: Pubkey = prompt_data("Enter New Authorized Address:")?;
+
+                let authorized_keypair = Keypair::read_from_file(&authorized_keypair_path)
+                    .map_err(|e| {
+                        anyhow!(
+                            "Failed to read keypair from {:?}, {}",
+                            authorized_keypair_path,
+                            e
+                        )
+                    })?;
+
+                show_spinner(
+                    self.description(),
+                    process_vote_authorize(
+                        ctx,
+                        &vote_account_pubkey,
+                        &authorized_keypair,
+                        &new_authorized_pubkey,
+                    ),
+                )
+                .await?;
+            }
             VoteCommand::WithdrawFromVote => todo!(),
             VoteCommand::ShowVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
@@ -283,6 +307,74 @@ async fn create_vote_account(
         "{} {}",
         style("Vote account address:").green(),
         style(vote_account_pubkey).cyan()
+    );
+
+    Ok(())
+}
+
+async fn process_vote_authorize(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+    authorized_keypair: &Keypair,
+    new_authorized_pubkey: &Pubkey,
+) -> anyhow::Result<()> {
+    let fee_payer_pubkey = ctx.pubkey();
+    let authorized_pubkey = authorized_keypair.pubkey();
+
+    let vote_account = ctx
+        .rpc()
+        .get_account(vote_account_pubkey)
+        .await
+        .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
+
+    if vote_account.owner != solana_vote_program::id() {
+        return Err(anyhow!("{} is not a vote account", vote_account_pubkey));
+    }
+
+    let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
+        .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
+
+    let current_epoch = ctx.rpc().get_epoch_info().await?.epoch;
+
+    let current_authorized_voter = vote_state
+        .authorized_voters
+        .get_authorized_voter(current_epoch)
+        .ok_or_else(|| anyhow!("Invalid vote account state; no authorized voters found"))?;
+
+    if authorized_pubkey != current_authorized_voter
+        && authorized_pubkey != vote_state.authorized_withdrawer
+    {
+        return Err(anyhow!(
+            "Keypair {} is not the current authorized voter ({}) or withdrawer ({})",
+            authorized_pubkey,
+            current_authorized_voter,
+            vote_state.authorized_withdrawer
+        ));
+    }
+
+    let vote_ix = vote_instruction::authorize(
+        vote_account_pubkey,
+        &authorized_pubkey,
+        new_authorized_pubkey,
+        VoteAuthorize::Voter,
+    );
+
+    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
+
+    let message = Message::new(&[vote_ix], Some(fee_payer_pubkey));
+
+    let mut tx = Transaction::new_unsigned(message);
+
+    let signers: Vec<&dyn Signer> = vec![ctx.keypair(), authorized_keypair];
+
+    tx.try_sign(&signers, recent_blockhash)?;
+
+    let signature = ctx.rpc().send_and_confirm_transaction(&tx).await?;
+
+    println!(
+        "{} {}",
+        style("Signature:").green().bold(),
+        style(signature).cyan()
     );
 
     Ok(())
