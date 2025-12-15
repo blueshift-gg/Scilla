@@ -3,7 +3,7 @@ use solana_keypair::{EncodableKey, Keypair, Signer};
 use solana_pubkey::Pubkey;
 use solana_sdk::{message::Message, transaction::Transaction};
 use solana_vote_program::{
-    vote_instruction::{self, CreateVoteAccountConfig},
+    vote_instruction::{self, CreateVoteAccountConfig, withdraw},
     vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
 };
 use std::path::PathBuf;
@@ -197,7 +197,42 @@ impl VoteCommand {
                 )
                 .await?;
             }
-            VoteCommand::WithdrawFromVote => todo!(),
+            VoteCommand::WithdrawFromVote => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                let authorized_keypair_path: PathBuf =
+                    prompt_data("Enter Authorized Withdraw Keypair:")?;
+                let recipient_address: Pubkey = prompt_data("Enter Recipient Address:")?;
+
+                let amount_str: String =
+                    prompt_data("Enter withdraw amount in SOL (empty for max):")?;
+                let amount: u64 = if amount_str.trim().is_empty() {
+                    0
+                } else {
+                    let sol: f64 = amount_str.parse().map_err(|_| anyhow!("Invalid amount"))?;
+                    (sol * 1_000_000_000.0) as u64
+                };
+
+                let authorized_keypair = Keypair::read_from_file(&authorized_keypair_path)
+                    .map_err(|e| {
+                        anyhow!(
+                            "Failed to read keypair from {:?}, {}",
+                            authorized_keypair_path,
+                            e
+                        )
+                    })?;
+
+                show_spinner(
+                    self.description(),
+                    process_sol_withdraw_from_vote_account(
+                        ctx,
+                        &vote_account_pubkey,
+                        &authorized_keypair,
+                        &recipient_address,
+                        amount,
+                    ),
+                )
+                .await?;
+            }
             VoteCommand::ShowVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
                 show_spinner(
@@ -366,6 +401,90 @@ async fn process_vote_authorize(
     let mut tx = Transaction::new_unsigned(message);
 
     let signers: Vec<&dyn Signer> = vec![ctx.keypair(), authorized_keypair];
+
+    tx.try_sign(&signers, recent_blockhash)?;
+
+    let signature = ctx.rpc().send_and_confirm_transaction(&tx).await?;
+
+    println!(
+        "{} {}",
+        style("Signature:").green().bold(),
+        style(signature).cyan()
+    );
+
+    Ok(())
+}
+
+async fn process_sol_withdraw_from_vote_account(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+    authorized_withdrawer: &Keypair,
+    recipient_address: &Pubkey,
+    amount: u64,
+) -> anyhow::Result<()> {
+    let fee_payer_pubkey = ctx.pubkey();
+    let withdrawer_pubkey = authorized_withdrawer.pubkey();
+
+    let vote_account = ctx
+        .rpc()
+        .get_account(vote_account_pubkey)
+        .await
+        .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
+
+    if vote_account.owner != solana_vote_program::id() {
+        return Err(anyhow!("{} is not a vote account", vote_account_pubkey));
+    }
+
+    let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
+        .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
+
+    if withdrawer_pubkey != vote_state.authorized_withdrawer {
+        return Err(anyhow!(
+            "Keypair {} is not the authorized withdrawer ({})",
+            withdrawer_pubkey,
+            vote_state.authorized_withdrawer
+        ));
+    }
+
+    let current_balance = ctx.rpc().get_balance(vote_account_pubkey).await?;
+    let minimum_balance = ctx
+        .rpc()
+        .get_minimum_balance_for_rent_exemption(VoteStateV4::size_of())
+        .await?;
+
+    let withdraw_amount = if amount == 0 {
+        current_balance.saturating_sub(minimum_balance)
+    } else {
+        amount
+    };
+
+    let balance_remaining = current_balance.saturating_sub(withdraw_amount);
+
+    if balance_remaining < minimum_balance && balance_remaining != 0 {
+        return Err(anyhow!(
+            "Withdraw amount too large. The vote account balance must be at least {:.9} SOL to remain rent exempt, or withdraw everything",
+            minimum_balance as f64 / 1_000_000_000.0
+        ));
+    }
+
+    if withdraw_amount == 0 {
+        return Err(anyhow!("Nothing to withdraw"));
+    }
+
+    let withdraw_ix = withdraw(
+        vote_account_pubkey,
+        &withdrawer_pubkey,
+        withdraw_amount,
+        recipient_address,
+    );
+
+    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
+
+    let message = Message::new(&[withdraw_ix], Some(fee_payer_pubkey));
+
+    let mut tx = Transaction::new_unsigned(message);
+
+    let signers: Vec<&dyn Signer> = vec![ctx.keypair(), authorized_withdrawer];
 
     tx.try_sign(&signers, recent_blockhash)?;
 
