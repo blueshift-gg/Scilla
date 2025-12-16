@@ -11,6 +11,7 @@ pub mod config;
 pub mod constants;
 pub mod context;
 pub mod error;
+pub mod misc;
 pub mod prompt;
 pub mod ui;
 

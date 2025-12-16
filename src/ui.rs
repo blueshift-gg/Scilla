@@ -1,4 +1,7 @@
-use indicatif::{ProgressBar, ProgressStyle};
+use {
+    console::style,
+    indicatif::{ProgressBar, ProgressStyle},
+};
 
 pub async fn show_spinner<F, T>(message: &str, fut: F) -> anyhow::Result<T>
 where
@@ -17,4 +20,8 @@ where
     spinner.finish_with_message("✅ Done");
 
     result
+}
+
+pub fn print_error(message: impl std::fmt::Display) {
+    println!("\n{}\n", style(message).red().bold());
 }
