@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use solana_keypair::{Keypair, Signer};
 use solana_message::Message;
 use solana_pubkey::Pubkey;
@@ -139,18 +139,18 @@ async fn create_vote_account(
     let fee_payer_pubkey = ctx.pubkey();
 
     if fee_payer_pubkey == &vote_account_pubkey {
-        return Err(anyhow!(
+        bail!(
             "Fee payer {} cannot be the same as vote account {}",
             fee_payer_pubkey,
             vote_account_pubkey
-        ));
+        );
     }
     if vote_account_pubkey == identity_pubkey {
-        return Err(anyhow!(
+        bail!(
             "Vote account {} cannot be the same as identity {}",
             vote_account_pubkey,
             identity_pubkey
-        ));
+        );
     }
 
     // checking if vote account already exists
@@ -175,12 +175,12 @@ async fn create_vote_account(
 
     let fee_payer_balance = ctx.rpc().get_balance(fee_payer_pubkey).await?;
     if fee_payer_balance < required_balance {
-        return Err(anyhow!(
+        bail!(
             "Insufficient balance. Fee payer has {} lamports, need at least {} lamports (~{:.4} SOL)",
             fee_payer_balance,
             required_balance,
             required_balance as f64 / 1_000_000_000.0
-        ));
+        );
     }
 
     let vote_init = VoteInit {
@@ -238,7 +238,7 @@ async fn process_authorize_vote(
         .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
 
     if vote_account.owner != solana_vote_program::id() {
-        return Err(anyhow!("{} is not a vote account", vote_account_pubkey));
+        bail!("{} is not a vote account", vote_account_pubkey);
     }
 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
@@ -254,12 +254,12 @@ async fn process_authorize_vote(
     if authorized_pubkey != current_authorized_voter
         && authorized_pubkey != vote_state.authorized_withdrawer
     {
-        return Err(anyhow!(
+        bail!(
             "Keypair {} is not the current authorized voter ({}) or withdrawer ({})",
             authorized_pubkey,
             current_authorized_voter,
             vote_state.authorized_withdrawer
-        ));
+        );
     }
 
     let vote_ix = vote_instruction::authorize(
@@ -307,18 +307,18 @@ async fn process_sol_withdraw_from_vote_account(
         .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
 
     if vote_account.owner != solana_vote_program::id() {
-        return Err(anyhow!("{} is not a vote account", vote_account_pubkey));
+        bail!("{} is not a vote account", vote_account_pubkey);
     }
 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
         .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
 
     if withdrawer_pubkey != vote_state.authorized_withdrawer {
-        return Err(anyhow!(
+        bail!(
             "Keypair {} is not the authorized withdrawer ({})",
             withdrawer_pubkey,
             vote_state.authorized_withdrawer
-        ));
+        );
     }
 
     let current_balance = ctx.rpc().get_balance(vote_account_pubkey).await?;
@@ -336,14 +336,14 @@ async fn process_sol_withdraw_from_vote_account(
     let balance_remaining = current_balance.saturating_sub(withdraw_amount);
 
     if balance_remaining < minimum_balance && balance_remaining != 0 {
-        return Err(anyhow!(
+        bail!(
             "Withdraw amount too large. The vote account balance must be at least {:.9} SOL to remain rent exempt, or withdraw everything",
             minimum_balance as f64 / 1_000_000_000.0
-        ));
+        );
     }
 
     if withdraw_amount == 0 {
-        return Err(anyhow!("Nothing to withdraw"));
+        bail!("Nothing to withdraw");
     }
 
     let withdraw_ix = withdraw(
@@ -382,7 +382,7 @@ async fn get_vote_account(ctx: &ScillaContext, vote_account_pubkey: &Pubkey) -> 
         .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
 
     if vote_account.owner != solana_vote_program::id() {
-        return Err(anyhow!("{} is not a vote account", vote_account_pubkey));
+        bail!("{} is not a vote account", vote_account_pubkey);
     }
 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
