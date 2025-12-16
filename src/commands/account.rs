@@ -126,8 +126,8 @@ async fn fetch_acc_data(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<
         ]);
 
     println!(
-        "\n{}\n{}",
-        style("ACCOUNT INFORMATION").green().bold(),
+        "{}\n{}",
+        style("ACCOUNT INFO").green().bold(),
         table
     );
 
