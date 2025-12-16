@@ -131,11 +131,7 @@ async fn fetch_acc_data(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<
             Cell::new(format!("{}", acc.rent_epoch)),
         ]);
 
-    println!(
-        "{}\n{}",
-        style("ACCOUNT INFO").green().bold(),
-        table
-    );
+    println!("{}\n{}", style("ACCOUNT INFO").green().bold(), table);
 
     Ok(())
 }
