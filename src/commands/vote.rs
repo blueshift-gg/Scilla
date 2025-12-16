@@ -1,13 +1,15 @@
 use anyhow::anyhow;
-use solana_keypair::{EncodableKey, Keypair, Signer};
+use solana_keypair::{Keypair, Signer};
+use solana_message::Message;
 use solana_pubkey::Pubkey;
-use solana_sdk::{message::Message, transaction::Transaction};
+use solana_transaction::Transaction;
 use solana_vote_program::{
     vote_instruction::{self, CreateVoteAccountConfig, withdraw},
     vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
 };
 use std::path::PathBuf;
 use {
+    crate::misc::helpers::{read_keypair_from_path, sol_to_lamports},
     crate::{
         ScillaContext, ScillaResult, commands::CommandExec, prompt::prompt_data, ui::show_spinner,
     },
@@ -25,107 +27,17 @@ pub enum VoteCommand {
 }
 
 impl VoteCommand {
-    pub fn spinner_msg(&self) -> &'static str {
+    pub fn description(&self) -> &'static str {
         match self {
-            VoteCommand::CreateVoteAccount => "Creating vote account…",
-            VoteCommand::AuthorizeVoter => "Authorizing voter…",
-            VoteCommand::WithdrawFromVoteAccount => "Withdrawing SOL from vote account…",
-            VoteCommand::ShowVoteAccount => "Fetching vote account details…",
-            VoteCommand::GoBack => "Going back…",
+            VoteCommand::CreateVoteAccount => "Initialize a new vote account",
+            VoteCommand::AuthorizeVoter => "Change authorized voter",
+            VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
+            VoteCommand::ShowVoteAccount => "Display vote account info",
+            VoteCommand::GoBack => "Go back",
         }
     }
 }
 
-impl VoteCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
-        match self {
-            VoteCommand::ShowVoteAccount => {
-                let pubkey: Pubkey = prompt_data("Enter Vote Account Pubkey:")?;
-                show_spinner(self.spinner_msg(), show_vote_account(ctx, &pubkey)).await?;
-            }
-            VoteCommand::CreateVoteAccount => todo!(),
-            VoteCommand::AuthorizeVoter => todo!(),
-            VoteCommand::WithdrawFromVoteAccount => todo!(),
-            VoteCommand::GoBack => return Ok(CommandExec::GoBack),
-        }
-        Ok(CommandExec::Process(()))
-    }
-}
-
-async fn show_vote_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<()> {
-    let vote_accounts = ctx.rpc().get_vote_accounts().await?;
-
-    let vote_account = vote_accounts
-        .current
-        .iter()
-        .find(|va| va.vote_pubkey == pubkey.to_string())
-        .or_else(|| {
-            vote_accounts
-                .delinquent
-                .iter()
-                .find(|va| va.vote_pubkey == pubkey.to_string())
-        });
-
-    match vote_account {
-        Some(va) => {
-            let mut table = Table::new();
-            table
-                .load_preset(UTF8_FULL)
-                .set_header(vec![
-                    Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-                ])
-                .add_row(vec![
-                    Cell::new("Vote Account"),
-                    Cell::new(va.vote_pubkey.clone()),
-                ])
-                .add_row(vec![
-                    Cell::new("Node Pubkey"),
-                    Cell::new(va.node_pubkey.clone()),
-                ])
-                .add_row(vec![
-                    Cell::new("Commission"),
-                    Cell::new(format!("{}%", va.commission)),
-                ])
-                .add_row(vec![
-                    Cell::new("Activated Stake (SOL)"),
-                    Cell::new(format!(
-                        "{:.2}",
-                        va.activated_stake as f64 / 1_000_000_000.0
-                    )),
-                ])
-                .add_row(vec![
-                    Cell::new("Last Vote"),
-                    Cell::new(format!("{}", va.last_vote)),
-                ])
-                .add_row(vec![
-                    Cell::new("Root Slot"),
-                    Cell::new(format!("{}", va.root_slot)),
-                ])
-                .add_row(vec![
-                    Cell::new("Status"),
-                    Cell::new(
-                        if vote_accounts
-                            .current
-                            .iter()
-                            .any(|v| v.vote_pubkey == pubkey.to_string())
-                        {
-                            "Current"
-                        } else {
-                            "Delinquent"
-                        },
-                    ),
-                ]);
-
-            println!("\n{}", style("VOTE ACCOUNT INFO").green().bold());
-            println!("{}", table);
-        }
-        None => {
-            println!(
-                "{} Vote account {} not found in current or delinquent validators.",
-                style("⚠").yellow(),
-                style(pubkey).cyan()
-            );
 impl VoteCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
         match self {
@@ -134,32 +46,11 @@ impl VoteCommand {
                 let identity_keypair_path: PathBuf = prompt_data("Enter Identity Keypair:")?;
                 let withdraw_keypair_path: PathBuf = prompt_data("Enter Withdraw Keypair:")?;
 
-                let account_keypair =
-                    Keypair::read_from_file(&account_keypair_path).map_err(|e| {
-                        anyhow!(
-                            "Failed to read keypair from {:?}, {}",
-                            account_keypair_path,
-                            e
-                        )
-                    })?;
+                let account_keypair = read_keypair_from_path(&account_keypair_path)?;
 
-                let identity_keypair =
-                    Keypair::read_from_file(&identity_keypair_path).map_err(|e| {
-                        anyhow!(
-                            "Failed to read keypair from {:?}, {}",
-                            identity_keypair_path,
-                            e
-                        )
-                    })?;
+                let identity_keypair = read_keypair_from_path(&identity_keypair_path)?;
 
-                let withdraw_keypair =
-                    Keypair::read_from_file(&withdraw_keypair_path).map_err(|e| {
-                        anyhow!(
-                            "Failed to read keypair from {:?}, {}",
-                            withdraw_keypair_path,
-                            e
-                        )
-                    })?;
+                let withdraw_keypair = read_keypair_from_path(&withdraw_keypair_path)?;
 
                 show_spinner(
                     self.description(),
@@ -177,18 +68,11 @@ impl VoteCommand {
                 let authorized_keypair_path: PathBuf = prompt_data("Enter Authorized Keypair:")?;
                 let new_authorized_pubkey: Pubkey = prompt_data("Enter New Authorized Address:")?;
 
-                let authorized_keypair = Keypair::read_from_file(&authorized_keypair_path)
-                    .map_err(|e| {
-                        anyhow!(
-                            "Failed to read keypair from {:?}, {}",
-                            authorized_keypair_path,
-                            e
-                        )
-                    })?;
+                let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
 
                 show_spinner(
                     self.description(),
-                    process_vote_authorize(
+                    process_authorize_vote(
                         ctx,
                         &vote_account_pubkey,
                         &authorized_keypair,
@@ -197,7 +81,7 @@ impl VoteCommand {
                 )
                 .await?;
             }
-            VoteCommand::WithdrawFromVote => {
+            VoteCommand::WithdrawFromVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
                 let authorized_keypair_path: PathBuf =
                     prompt_data("Enter Authorized Withdraw Keypair:")?;
@@ -209,17 +93,10 @@ impl VoteCommand {
                     0
                 } else {
                     let sol: f64 = amount_str.parse().map_err(|_| anyhow!("Invalid amount"))?;
-                    (sol * 1_000_000_000.0) as u64
+                    sol_to_lamports(sol)
                 };
 
-                let authorized_keypair = Keypair::read_from_file(&authorized_keypair_path)
-                    .map_err(|e| {
-                        anyhow!(
-                            "Failed to read keypair from {:?}, {}",
-                            authorized_keypair_path,
-                            e
-                        )
-                    })?;
+                let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
 
                 show_spinner(
                     self.description(),
@@ -248,8 +125,6 @@ impl VoteCommand {
 
         Ok(CommandExec::Process(()))
     }
-
-    Ok(())
 }
 
 async fn create_vote_account(
@@ -347,7 +222,7 @@ async fn create_vote_account(
     Ok(())
 }
 
-async fn process_vote_authorize(
+async fn process_authorize_vote(
     ctx: &ScillaContext,
     vote_account_pubkey: &Pubkey,
     authorized_keypair: &Keypair,
