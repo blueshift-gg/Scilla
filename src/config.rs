@@ -95,4 +95,13 @@ impl ScillaConfig {
         let config: ScillaConfig = toml::from_str(&data)?;
         Ok(config)
     }
+
+    pub fn load_from_path(path: &std::path::Path) -> Result<ScillaConfig, ScillaError> {
+        if !path.exists() {
+            return Err(ScillaError::ConfigPathDoesntExists);
+        }
+        let data = fs::read_to_string(path)?;
+        let config: ScillaConfig = toml::from_str(&data)?;
+        Ok(config)
+    }
 }
