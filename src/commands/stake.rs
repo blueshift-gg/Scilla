@@ -11,10 +11,10 @@ use {
     solana_sdk_ids::sysvar::stake_history,
     solana_stake_interface::{
         stake_history::StakeHistory,
-        state::{Meta, Stake, StakeActivationStatus, StakeStateV2},
+        state::{Meta, StakeActivationStatus, StakeStateV2},
     },
     solana_sysvar::clock,
-    std::{ops::Div, str::FromStr},
+    std::ops::Div,
 };
 
 /// Commands related to staking operations
