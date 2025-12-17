@@ -1641,6 +1641,7 @@ dependencies = [
  "solana-keypair",
  "solana-pubkey 4.0.0",
  "solana-rpc-client",
+ "solana-sdk-ids",
  "solana-stake-interface",
  "solana-sysvar",
  "thiserror 2.0.17",

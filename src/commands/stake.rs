@@ -8,6 +8,7 @@ use {
     console::style,
     solana_clock::Clock,
     solana_pubkey::Pubkey,
+    solana_sdk_ids::sysvar::stake_history,
     solana_stake_interface::{
         stake_history::StakeHistory,
         state::{Meta, Stake, StakeActivationStatus, StakeStateV2},
@@ -67,25 +68,41 @@ impl StakeCommand {
 }
 
 async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<()> {
-    // Fetch account data directly via RPC
-    let account = ctx.rpc().get_account(pubkey).await?;
+    let accounts = ctx
+        .rpc()
+        .get_multiple_accounts(&[*pubkey, stake_history::id(), clock::id()])
+        .await?;
 
-    // Parse stake state using bincode (like clock)
-    let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake state: {}", e))?;
+    let stake_account = match accounts.get(0) {
+        Some(account) => match account {
+            Some(data) => data,
+            None => return Err(anyhow::anyhow!("Failed to get stake account data")),
+        },
+        None => return Err(anyhow::anyhow!("Failed to get stake account")),
+    };
 
-    // Fetch sysvars for activation calculation
-    // Stake History sysvar address: SysvarStakeHistory1111111111111111111111111
-    let stake_history_id = Pubkey::from_str("SysvarStakeHistory1111111111111111111111111")
-        .map_err(|e| anyhow::anyhow!("Failed to parse stake history sysvar ID: {}", e))?;
-    let stake_history_rpc_account = ctx.rpc().get_account(&stake_history_id).await?;
-    let stake_history: StakeHistory = bincode::deserialize(&stake_history_rpc_account.data)
+    let stake_history_account = match accounts.get(1) {
+        Some(account) => match account {
+            Some(data) => data,
+            None => return Err(anyhow::anyhow!("Failed to get stake history account data")),
+        },
+        None => return Err(anyhow::anyhow!("Failed to get stake history account")),
+    };
+    let clock_account = match accounts.get(2) {
+        Some(account) => match account {
+            Some(data) => data,
+            None => return Err(anyhow::anyhow!("Failed to get clock account data")),
+        },
+        None => return Err(anyhow::anyhow!("Failed to get clock account")),
+    };
+
+    let stake_history: StakeHistory = bincode::deserialize(&stake_history_account.data)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize stake history: {}", e))?;
-
-    let clock_id = clock::id();
-    let clock_rpc_account = ctx.rpc().get_account(&clock_id).await?;
-    let clock: Clock = bincode::deserialize(&clock_rpc_account.data)
+    let clock: Clock = bincode::deserialize(&clock_account.data)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize clock: {}", e))?;
+
+    let stake_state: StakeStateV2 = bincode::deserialize(&stake_account.data)
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake state: {}", e))?;
 
     let current_epoch = clock.epoch;
 
@@ -107,11 +124,11 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
         ])
         .add_row(vec![
             Cell::new("Account Balance (Lamports)"),
-            Cell::new(format!("{}", account.lamports)),
+            Cell::new(format!("{}", stake_account.lamports)),
         ])
         .add_row(vec![
             Cell::new("Rent Epoch"),
-            Cell::new(format!("{}", account.rent_epoch)),
+            Cell::new(format!("{}", stake_account.rent_epoch)),
         ]);
 
     // Add stake state specific information
