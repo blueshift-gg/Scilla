@@ -2024,6 +2024,7 @@ dependencies = [
  "inquire",
  "serde",
  "solana-commitment-config",
+ "solana-instruction",
  "solana-keypair",
  "solana-message",
  "solana-native-token",

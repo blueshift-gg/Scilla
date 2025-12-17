@@ -1,15 +1,15 @@
 use anyhow::{anyhow, bail};
 use solana_keypair::{Keypair, Signer};
-use solana_message::Message;
 use solana_pubkey::Pubkey;
-use solana_transaction::Transaction;
 use solana_vote_program::{
     vote_instruction::{self, CreateVoteAccountConfig, withdraw},
     vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
 };
 use std::path::PathBuf;
 use {
-    crate::misc::helpers::{read_keypair_from_path, sol_to_lamports},
+    crate::misc::helpers::{
+        build_and_send_tx, parse_commission, parse_sol_amount, read_keypair_from_path,
+    },
     crate::{
         ScillaContext, ScillaResult, commands::CommandExec, prompt::prompt_data, ui::show_spinner,
     },
@@ -29,7 +29,7 @@ pub enum VoteCommand {
 impl VoteCommand {
     pub fn description(&self) -> &'static str {
         match self {
-            VoteCommand::CreateVoteAccount => "Initialize a new vote account",
+            VoteCommand::CreateVoteAccount => "Create a new vote account",
             VoteCommand::AuthorizeVoter => "Change authorized voter",
             VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
             VoteCommand::ShowVoteAccount => "Display vote account info",
@@ -42,9 +42,11 @@ impl VoteCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
         match self {
             VoteCommand::CreateVoteAccount => {
-                let account_keypair_path: PathBuf = prompt_data("Enter Account Keypair:")?;
-                let identity_keypair_path: PathBuf = prompt_data("Enter Identity Keypair:")?;
-                let withdraw_keypair_path: PathBuf = prompt_data("Enter Withdraw Keypair:")?;
+                let account_keypair_path: PathBuf = prompt_data("Enter Account Keypair Path:")?;
+                let identity_keypair_path: PathBuf = prompt_data("Enter Identity Keypair Path:")?;
+                let withdraw_keypair_path: PathBuf = prompt_data("Enter Withdraw Keypair Path:")?;
+                let commission_str: String = prompt_data("Enter Commission 0-100 (default 0):")?;
+                let commission = parse_commission(&commission_str)?;
 
                 let account_keypair = read_keypair_from_path(&account_keypair_path)?;
 
@@ -59,13 +61,15 @@ impl VoteCommand {
                         &account_keypair,
                         &identity_keypair,
                         &withdraw_keypair,
+                        commission,
                     ),
                 )
                 .await?;
             }
             VoteCommand::AuthorizeVoter => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
-                let authorized_keypair_path: PathBuf = prompt_data("Enter Authorized Keypair:")?;
+                let authorized_keypair_path: PathBuf =
+                    prompt_data("Enter Authorized Keypair Path:")?;
                 let new_authorized_pubkey: Pubkey = prompt_data("Enter New Authorized Address:")?;
 
                 let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
@@ -84,18 +88,12 @@ impl VoteCommand {
             VoteCommand::WithdrawFromVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
                 let authorized_keypair_path: PathBuf =
-                    prompt_data("Enter Authorized Withdraw Keypair:")?;
+                    prompt_data("Enter Authorized Withdraw Keypair Path:")?;
                 let recipient_address: Pubkey = prompt_data("Enter Recipient Address:")?;
 
                 let amount_str: String =
                     prompt_data("Enter withdraw amount in SOL (empty for max):")?;
-                let amount: u64 = if amount_str.trim().is_empty() {
-                    0
-                } else {
-                    let sol: f64 = amount_str.parse().map_err(|_| anyhow!("Invalid amount"))?;
-                    sol_to_lamports(sol)
-                };
-
+                let amount = parse_sol_amount(&amount_str)?;
                 let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
 
                 show_spinner(
@@ -118,9 +116,7 @@ impl VoteCommand {
                 )
                 .await?;
             }
-            VoteCommand::GoBack => {
-                return Ok(CommandExec::GoBack);
-            }
+            VoteCommand::GoBack => return Ok(CommandExec::GoBack),
         }
 
         Ok(CommandExec::Process(()))
@@ -132,6 +128,7 @@ async fn create_vote_account(
     vote_account_keypair: &Keypair,
     identity_keypair: &Keypair,
     authorized_withdrawer: &Keypair,
+    commission: u8,
 ) -> anyhow::Result<()> {
     let vote_account_pubkey = vote_account_keypair.pubkey();
     let identity_pubkey = identity_keypair.pubkey();
@@ -163,31 +160,20 @@ async fn create_vote_account(
                 vote_account_pubkey
             )
         };
-        return Err(anyhow!(err_msg));
+        bail!(err_msg)
     }
 
-    // min rent check
     let required_balance = ctx
         .rpc()
         .get_minimum_balance_for_rent_exemption(VoteStateV4::size_of())
         .await?
         .max(1);
 
-    let fee_payer_balance = ctx.rpc().get_balance(fee_payer_pubkey).await?;
-    if fee_payer_balance < required_balance {
-        bail!(
-            "Insufficient balance. Fee payer has {} lamports, need at least {} lamports (~{:.4} SOL)",
-            fee_payer_balance,
-            required_balance,
-            required_balance as f64 / 1_000_000_000.0
-        );
-    }
-
     let vote_init = VoteInit {
         node_pubkey: identity_pubkey,
         authorized_voter: identity_pubkey, // defaults to identity
         authorized_withdrawer: withdrawer_pubkey,
-        commission: 0, // TODO: prompt for this
+        commission,
     };
 
     let instructions = vote_instruction::create_account_with_config(
@@ -198,15 +184,12 @@ async fn create_vote_account(
         CreateVoteAccountConfig::default(),
     );
 
-    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
-    let message = Message::new(&instructions, Some(fee_payer_pubkey));
-    let mut tx = Transaction::new_unsigned(message);
-
-    let signers: Vec<&dyn Signer> = vec![ctx.keypair(), vote_account_keypair, identity_keypair];
-
-    tx.try_sign(&signers, recent_blockhash)?;
-
-    let signature = ctx.rpc().send_and_confirm_transaction(&tx).await?;
+    let signature = build_and_send_tx(
+        ctx,
+        &instructions,
+        &[ctx.keypair(), vote_account_keypair, identity_keypair],
+    )
+    .await?;
 
     println!(
         "{} {}",
@@ -228,7 +211,6 @@ async fn process_authorize_vote(
     authorized_keypair: &Keypair,
     new_authorized_pubkey: &Pubkey,
 ) -> anyhow::Result<()> {
-    let fee_payer_pubkey = ctx.pubkey();
     let authorized_pubkey = authorized_keypair.pubkey();
 
     let vote_account = ctx
@@ -269,17 +251,8 @@ async fn process_authorize_vote(
         VoteAuthorize::Voter,
     );
 
-    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
-
-    let message = Message::new(&[vote_ix], Some(fee_payer_pubkey));
-
-    let mut tx = Transaction::new_unsigned(message);
-
-    let signers: Vec<&dyn Signer> = vec![ctx.keypair(), authorized_keypair];
-
-    tx.try_sign(&signers, recent_blockhash)?;
-
-    let signature = ctx.rpc().send_and_confirm_transaction(&tx).await?;
+    let signature =
+        build_and_send_tx(ctx, &[vote_ix], &[ctx.keypair(), authorized_keypair]).await?;
 
     println!(
         "{} {}",
@@ -297,7 +270,6 @@ async fn process_sol_withdraw_from_vote_account(
     recipient_address: &Pubkey,
     amount: u64,
 ) -> anyhow::Result<()> {
-    let fee_payer_pubkey = ctx.pubkey();
     let withdrawer_pubkey = authorized_withdrawer.pubkey();
 
     let vote_account = ctx
@@ -353,17 +325,8 @@ async fn process_sol_withdraw_from_vote_account(
         recipient_address,
     );
 
-    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
-
-    let message = Message::new(&[withdraw_ix], Some(fee_payer_pubkey));
-
-    let mut tx = Transaction::new_unsigned(message);
-
-    let signers: Vec<&dyn Signer> = vec![ctx.keypair(), authorized_withdrawer];
-
-    tx.try_sign(&signers, recent_blockhash)?;
-
-    let signature = ctx.rpc().send_and_confirm_transaction(&tx).await?;
+    let signature =
+        build_and_send_tx(ctx, &[withdraw_ix], &[ctx.keypair(), authorized_withdrawer]).await?;
 
     println!(
         "{} {}",
