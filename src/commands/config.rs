@@ -8,7 +8,6 @@ use {
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
-    dirs,
     inquire::{Confirm, Select},
     solana_commitment_config::CommitmentLevel,
     std::{fs,fmt, path::PathBuf},
@@ -185,9 +184,7 @@ pub async fn generate_config() -> anyhow::Result<()> {
             _ => unreachable!(),
         };
 
-        let default_keypair = dirs::home_dir()
-            .expect("Could not determine home directory")
-            .join(".config/solana/id.json");
+        let default_keypair = ScillaConfig::default().keypair_path;
 
         let keypair_path = loop {
             let keypair_prompt = format!(
@@ -292,9 +289,7 @@ async fn edit_config() -> anyhow::Result<()> {
         .prompt()?;
 
     if edit_keypair {
-        let default_keypair = dirs::home_dir()
-            .expect("Could not determine home directory")
-            .join(".config/solana/id.json");
+        let default_keypair = ScillaConfig::default().keypair_path;
 
         loop {
             let keypair_prompt = format!(
