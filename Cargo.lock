@@ -2311,6 +2311,7 @@ dependencies = [
  "serde_derive",
  "solana-atomic-u64",
  "solana-define-syscall 4.0.1",
+ "solana-define-syscall 4.0.1",
  "solana-program-error",
  "solana-sanitize",
  "solana-sha256-hasher",
@@ -2562,6 +2563,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee1b699a2c1518028a9982e255e0eca10c44d90006542d9d7f9f40dbce3f7c78"
 dependencies = [
  "bincode",
+ "bincode",
  "borsh",
  "serde",
  "serde_derive",
@@ -2708,7 +2710,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84c9b0a1ff494e05f503a08b3d51150b73aa639544631e510279d6375f290997"
 dependencies = [
  "solana-account-info",
- "solana-define-syscall 4.0.1",
  "solana-define-syscall 4.0.1",
  "solana-program-error",
  "solana-pubkey 4.0.0",
@@ -2965,6 +2966,7 @@ checksum = "db7dc3011ea4c0334aaaa7e7128cb390ecf546b28d412e9bf2064680f57f588f"
 dependencies = [
  "sha2",
  "solana-define-syscall 4.0.1",
+ "solana-define-syscall 4.0.1",
  "solana-hash 4.0.1",
 ]
 
@@ -3106,6 +3108,7 @@ dependencies = [
  "serde_derive",
  "solana-account-info",
  "solana-clock",
+ "solana-define-syscall 4.0.1",
  "solana-define-syscall 4.0.1",
  "solana-epoch-rewards",
  "solana-epoch-schedule",
