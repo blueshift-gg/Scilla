@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail};
+use comfy_table::{Cell, Table, presets::UTF8_FULL};
 use solana_keypair::{Keypair, Signer};
 use solana_pubkey::Pubkey;
 use solana_vote_program::{
@@ -8,7 +9,8 @@ use solana_vote_program::{
 use std::path::PathBuf;
 use {
     crate::misc::helpers::{
-        build_and_send_tx, parse_commission, parse_sol_amount, read_keypair_from_path,
+        build_and_send_tx, lamports_to_sol, parse_commission, parse_sol_amount,
+        read_keypair_from_path,
     },
     crate::{
         ScillaContext, ScillaResult, commands::CommandExec, prompt::prompt_data, ui::show_spinner,
@@ -351,7 +353,7 @@ async fn get_vote_account(ctx: &ScillaContext, vote_account_pubkey: &Pubkey) -> 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
         .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
 
-    let balance_sol = vote_account.lamports as f64 / 1_000_000_000.0;
+    let balance_sol = lamports_to_sol(vote_account.lamports);
 
     let root_slot = match vote_state.root_slot {
         Some(slot) => slot.to_string(),
@@ -362,47 +364,54 @@ async fn get_vote_account(ctx: &ScillaContext, vote_account_pubkey: &Pubkey) -> 
         .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
         .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
 
-    println!(
-        "{} {} SOL",
-        style("Account Balance:").green().bold(),
-        balance_sol
-    );
-    println!(
-        "{} {}",
-        style("Validator Identity:").green().bold(),
-        vote_state.node_pubkey
-    );
-    println!(
-        "{} {}",
-        style("Vote Authority:").green().bold(),
-        vote_state
-            .authorized_voters
-            .last()
-            .map(|(_, v)| v)
-            .unwrap_or(&vote_state.node_pubkey)
-    );
-    println!(
-        "{} {}",
-        style("Withdraw Authority:").green().bold(),
-        vote_state.authorized_withdrawer
-    );
-    println!(
-        "{} {}",
-        style("Credits:").green().bold(),
-        vote_state.credits()
-    );
-    println!(
-        "{} {}%",
-        style("Commission:").green().bold(),
-        vote_state.inflation_rewards_commission_bps / 100
-    );
-    println!("{} {}", style("Root Slot:").green().bold(), root_slot);
-    println!(
-        "{} {} from slot {}",
-        style("Recent Timestamp:").green().bold(),
-        timestamp,
-        vote_state.last_timestamp.slot
-    );
+    let vote_authority = vote_state
+        .authorized_voters
+        .last()
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| vote_state.node_pubkey.to_string());
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Account Balance"),
+            Cell::new(format!("{} SOL", balance_sol)),
+        ])
+        .add_row(vec![
+            Cell::new("Validator Identity"),
+            Cell::new(vote_state.node_pubkey.to_string()),
+        ])
+        .add_row(vec![Cell::new("Vote Authority"), Cell::new(vote_authority)])
+        .add_row(vec![
+            Cell::new("Withdraw Authority"),
+            Cell::new(vote_state.authorized_withdrawer.to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Credits"),
+            Cell::new(vote_state.credits().to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Commission"),
+            Cell::new(format!(
+                "{}%",
+                vote_state.inflation_rewards_commission_bps / 100
+            )),
+        ])
+        .add_row(vec![Cell::new("Root Slot"), Cell::new(root_slot)])
+        .add_row(vec![
+            Cell::new("Recent Timestamp"),
+            Cell::new(format!(
+                "{} from slot {}",
+                timestamp, vote_state.last_timestamp.slot
+            )),
+        ]);
+
+    println!("\n{}", style("VOTE ACCOUNT INFORMATION").green().bold());
+    println!("{}", table);
 
     Ok(())
 }
