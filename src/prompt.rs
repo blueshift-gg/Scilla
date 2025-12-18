@@ -1,12 +1,10 @@
 use {
     crate::commands::{
-        account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
-        stake::StakeCommand, vote::VoteCommand, Command,
+        Command, account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
+        stake::StakeCommand, vote::VoteCommand,
     },
-    {
-        inquire::{Select, Text},
-        std::str::FromStr,
-    },
+    inquire::{Select, Text},
+    std::str::FromStr,
 };
 
 pub fn prompt_for_command() -> anyhow::Result<Command> {
@@ -132,7 +130,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
         "Vote Command:",
         vec![
             "Create Vote Account",
-            "Change Authorized Voter",
+            "Authorize Voter",
             "Withdraw From Vote Account",
             "Show Vote Account",
             "Go Back",
@@ -142,7 +140,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
 
     Ok(match choice {
         "Create Vote Account" => VoteCommand::CreateVoteAccount,
-        "Change Authorized Voter" => VoteCommand::ChangeAuthorizeVoter,
+        "Authorize Voter" => VoteCommand::AuthorizeVoter,
         "Withdraw From Vote Account" => VoteCommand::WithdrawFromVoteAccount,
         "Show Vote Account" => VoteCommand::ShowVoteAccount,
         "Go Back" => VoteCommand::GoBack,

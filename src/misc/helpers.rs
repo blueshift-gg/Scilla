@@ -1,11 +1,12 @@
-use crate::ScillaContext;
-use crate::constants::LAMPORTS_PER_SOL;
-use anyhow::{anyhow, bail};
-use solana_instruction::Instruction;
-use solana_keypair::{EncodableKey, Keypair, Signature, Signer};
-use solana_message::Message;
-use solana_transaction::Transaction;
-use std::path::Path;
+use {
+    crate::{ScillaContext, constants::LAMPORTS_PER_SOL},
+    anyhow::{anyhow, bail},
+    solana_instruction::Instruction,
+    solana_keypair::{EncodableKey, Keypair, Signature, Signer},
+    solana_message::Message,
+    solana_transaction::Transaction,
+    std::path::Path,
+};
 
 pub fn sol_to_lamports(sol: f64) -> u64 {
     (sol * LAMPORTS_PER_SOL as f64) as u64

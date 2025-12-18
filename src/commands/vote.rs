@@ -1,28 +1,31 @@
-use anyhow::{anyhow, bail};
-use comfy_table::{Cell, Table, presets::UTF8_FULL};
-use solana_keypair::{Keypair, Signer};
-use solana_pubkey::Pubkey;
-use solana_vote_program::{
-    vote_instruction::{self, CreateVoteAccountConfig, withdraw},
-    vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
-};
-use std::path::PathBuf;
 use {
-    crate::misc::helpers::{
-        build_and_send_tx, lamports_to_sol, parse_commission, parse_sol_amount,
-        read_keypair_from_path,
-    },
     crate::{
-        ScillaContext, ScillaResult, commands::CommandExec, prompt::prompt_data, ui::show_spinner,
+        ScillaContext, ScillaResult,
+        commands::CommandExec,
+        misc::helpers::{
+            build_and_send_tx, lamports_to_sol, parse_commission, parse_sol_amount,
+            read_keypair_from_path,
+        },
+        prompt::prompt_data,
+        ui::show_spinner,
     },
     ::console::style,
+    anyhow::{anyhow, bail},
+    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    solana_keypair::{Keypair, Signer},
+    solana_pubkey::Pubkey,
+    solana_vote_program::{
+        vote_instruction::{self, CreateVoteAccountConfig, withdraw},
+        vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
+    },
+    std::path::PathBuf,
 };
 
 /// Commands related to validator/vote account operations
 #[derive(Debug, Clone)]
 pub enum VoteCommand {
     CreateVoteAccount,
-    ChangeAuthorizeVoter,
+    AuthorizeVoter,
     WithdrawFromVoteAccount,
     ShowVoteAccount,
     GoBack,
@@ -32,7 +35,7 @@ impl VoteCommand {
     pub fn spinner_msg(&self) -> &'static str {
         match self {
             VoteCommand::CreateVoteAccount => "Creating vote account…",
-            VoteCommand::ChangeAuthorizeVoter => "Changing Authorized voter…",
+            VoteCommand::AuthorizeVoter => "Authorizing voter…",
             VoteCommand::WithdrawFromVoteAccount => "Withdrawing SOL from vote account…",
             VoteCommand::ShowVoteAccount => "Fetching vote account details…",
             VoteCommand::GoBack => "Going back…",
@@ -58,7 +61,7 @@ impl VoteCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    create_vote_account(
+                    process_create_vote_account(
                         ctx,
                         &account_keypair,
                         &identity_keypair,
@@ -68,7 +71,7 @@ impl VoteCommand {
                 )
                 .await?;
             }
-            VoteCommand::ChangeAuthorizeVoter => {
+            VoteCommand::AuthorizeVoter => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
                 let authorized_keypair_path: PathBuf =
                     prompt_data("Enter Authorized Keypair Path:")?;
@@ -78,7 +81,7 @@ impl VoteCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_change_authorized_voter(
+                    process_authorize_voter(
                         ctx,
                         &vote_account_pubkey,
                         &authorized_keypair,
@@ -125,7 +128,7 @@ impl VoteCommand {
     }
 }
 
-async fn create_vote_account(
+async fn process_create_vote_account(
     ctx: &ScillaContext,
     vote_account_keypair: &Keypair,
     identity_keypair: &Keypair,
@@ -207,7 +210,7 @@ async fn create_vote_account(
     Ok(())
 }
 
-async fn process_change_authorized_voter(
+async fn process_authorize_voter(
     ctx: &ScillaContext,
     vote_account_pubkey: &Pubkey,
     authorized_keypair: &Keypair,
