@@ -29,13 +29,13 @@ pub enum VoteCommand {
 }
 
 impl VoteCommand {
-    pub fn description(&self) -> &'static str {
+    pub fn spinner_msg(&self) -> &'static str {
         match self {
-            VoteCommand::CreateVoteAccount => "Create a new vote account",
-            VoteCommand::ChangeAuthorizeVoter => "Change authorized voter",
-            VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
-            VoteCommand::ShowVoteAccount => "Show vote account info",
-            VoteCommand::GoBack => "Go back",
+            VoteCommand::CreateVoteAccount => "Creating vote account…",
+            VoteCommand::ChangeAuthorizeVoter => "Changing Authorized voter…",
+            VoteCommand::WithdrawFromVoteAccount => "Withdrawing SOL from vote account…",
+            VoteCommand::ShowVoteAccount => "Fetching vote account details…",
+            VoteCommand::GoBack => "Going back…",
         }
     }
 }
@@ -57,7 +57,7 @@ impl VoteCommand {
                 let withdraw_keypair = read_keypair_from_path(&withdraw_keypair_path)?;
 
                 show_spinner(
-                    self.description(),
+                    self.spinner_msg(),
                     create_vote_account(
                         ctx,
                         &account_keypair,
@@ -77,8 +77,8 @@ impl VoteCommand {
                 let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
 
                 show_spinner(
-                    self.description(),
-                    process_authorize_vote(
+                    self.spinner_msg(),
+                    process_change_authorized_voter(
                         ctx,
                         &vote_account_pubkey,
                         &authorized_keypair,
@@ -99,7 +99,7 @@ impl VoteCommand {
                 let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
 
                 show_spinner(
-                    self.description(),
+                    self.spinner_msg(),
                     process_sol_withdraw_from_vote_account(
                         ctx,
                         &vote_account_pubkey,
@@ -113,8 +113,8 @@ impl VoteCommand {
             VoteCommand::ShowVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
                 show_spinner(
-                    self.description(),
-                    get_vote_account(ctx, &vote_account_pubkey),
+                    self.spinner_msg(),
+                    process_fetch_vote_account(ctx, &vote_account_pubkey),
                 )
                 .await?;
             }
@@ -207,7 +207,7 @@ async fn create_vote_account(
     Ok(())
 }
 
-async fn process_authorize_vote(
+async fn process_change_authorized_voter(
     ctx: &ScillaContext,
     vote_account_pubkey: &Pubkey,
     authorized_keypair: &Keypair,
@@ -314,7 +314,10 @@ async fn process_sol_withdraw_from_vote_account(
     Ok(())
 }
 
-async fn get_vote_account(ctx: &ScillaContext, vote_account_pubkey: &Pubkey) -> anyhow::Result<()> {
+async fn process_fetch_vote_account(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+) -> anyhow::Result<()> {
     let vote_account = ctx
         .rpc()
         .get_account(vote_account_pubkey)
@@ -336,8 +339,9 @@ async fn get_vote_account(ctx: &ScillaContext, vote_account_pubkey: &Pubkey) -> 
     };
 
     let timestamp = chrono::DateTime::from_timestamp(vote_state.last_timestamp.timestamp, 0)
-        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .expect("Solana timestamp should always be in valid range")
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
 
     let vote_authority = vote_state
         .authorized_voters

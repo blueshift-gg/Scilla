@@ -132,7 +132,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
         "Vote Command:",
         vec![
             "Create Vote Account",
-            "Change Authorize Voter",
+            "Change Authorized Voter",
             "Withdraw From Vote Account",
             "Show Vote Account",
             "Go Back",
@@ -142,7 +142,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
 
     Ok(match choice {
         "Create Vote Account" => VoteCommand::CreateVoteAccount,
-        "Change Authorize Voter" => VoteCommand::ChangeAuthorizeVoter,
+        "Change Authorized Voter" => VoteCommand::ChangeAuthorizeVoter,
         "Withdraw From Vote Account" => VoteCommand::WithdrawFromVoteAccount,
         "Show Vote Account" => VoteCommand::ShowVoteAccount,
         "Go Back" => VoteCommand::GoBack,
