@@ -117,7 +117,7 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
         "Balance" => AccountCommand::Balance,
         "Transfer" => AccountCommand::Transfer,
         "Airdrop" => AccountCommand::Airdrop,
-        "Confirm Transaction" => AccountCommand::CheckTransactionConfirmation,
+        "Check Transaction Confirmation" => AccountCommand::CheckTransactionConfirmation,
         "Largest Accounts" => AccountCommand::LargestAccounts,
         "Nonce Account" => AccountCommand::NonceAccount,
         "Go Back" => AccountCommand::GoBack,
