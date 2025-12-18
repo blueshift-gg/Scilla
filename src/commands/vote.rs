@@ -22,7 +22,7 @@ use {
 #[derive(Debug, Clone)]
 pub enum VoteCommand {
     CreateVoteAccount,
-    AuthorizeVoter,
+    ChangeAuthorizeVoter,
     WithdrawFromVoteAccount,
     ShowVoteAccount,
     GoBack,
@@ -32,9 +32,9 @@ impl VoteCommand {
     pub fn description(&self) -> &'static str {
         match self {
             VoteCommand::CreateVoteAccount => "Create a new vote account",
-            VoteCommand::AuthorizeVoter => "Change authorized voter",
+            VoteCommand::ChangeAuthorizeVoter => "Change authorized voter",
             VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
-            VoteCommand::ShowVoteAccount => "Display vote account info",
+            VoteCommand::ShowVoteAccount => "Show vote account info",
             VoteCommand::GoBack => "Go back",
         }
     }
@@ -68,7 +68,7 @@ impl VoteCommand {
                 )
                 .await?;
             }
-            VoteCommand::AuthorizeVoter => {
+            VoteCommand::ChangeAuthorizeVoter => {
                 let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
                 let authorized_keypair_path: PathBuf =
                     prompt_data("Enter Authorized Keypair Path:")?;
@@ -295,35 +295,10 @@ async fn process_sol_withdraw_from_vote_account(
         );
     }
 
-    let current_balance = ctx.rpc().get_balance(vote_account_pubkey).await?;
-    let minimum_balance = ctx
-        .rpc()
-        .get_minimum_balance_for_rent_exemption(VoteStateV4::size_of())
-        .await?;
-
-    let withdraw_amount = if amount == 0 {
-        current_balance.saturating_sub(minimum_balance)
-    } else {
-        amount
-    };
-
-    let balance_remaining = current_balance.saturating_sub(withdraw_amount);
-
-    if balance_remaining < minimum_balance && balance_remaining != 0 {
-        bail!(
-            "Withdraw amount too large. The vote account balance must be at least {:.9} SOL to remain rent exempt, or withdraw everything",
-            minimum_balance as f64 / 1_000_000_000.0
-        );
-    }
-
-    if withdraw_amount == 0 {
-        bail!("Nothing to withdraw");
-    }
-
     let withdraw_ix = withdraw(
         vote_account_pubkey,
         &withdrawer_pubkey,
-        withdraw_amount,
+        amount,
         recipient_address,
     );
 
