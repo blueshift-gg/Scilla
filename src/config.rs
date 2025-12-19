@@ -1,5 +1,8 @@
 use {
-    crate::{constants::SCILLA_CONFIG_RELATIVE_PATH, error::ScillaError},
+    crate::{
+        constants::{DEFAULT_KEYPAIR_PATH, DEVNET_RPC, SCILLA_CONFIG_RELATIVE_PATH},
+        error::ScillaError,
+    },
     serde::{Deserialize, Serialize},
     solana_commitment_config::CommitmentLevel,
     std::{env::home_dir, fs, path::PathBuf},
@@ -41,8 +44,6 @@ pub struct ScillaConfig {
 
 impl Default for ScillaConfig {
     fn default() -> Self {
-        use crate::constants::{DEFAULT_KEYPAIR_PATH, DEVNET_RPC};
-
         let default_keypair_path = home_dir()
             .expect("Could not determine home directory")
             .join(DEFAULT_KEYPAIR_PATH);
