@@ -127,6 +127,13 @@ where
     T: FromStr,
     <T as FromStr>::Err: ToString + Send + Sync + 'static,
 {
-    let input = Text::new(msg).prompt()?;
-    T::from_str(&input).map_err(|e| anyhow::anyhow!(e.to_string()))
+    loop {
+        let input = Text::new(msg).prompt()?;
+        match T::from_str(&input) {
+            Ok(value) => return Ok(value),
+            Err(e) => {
+                eprintln!("Invalid input: {}. Please try again.\n", e.to_string());
+            }
+        }
+    }
 }
