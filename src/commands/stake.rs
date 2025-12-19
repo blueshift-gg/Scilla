@@ -15,8 +15,10 @@ use {
         instruction::{deactivate_stake, withdraw},
         program::id as stake_program_id,
         state::StakeStateV2,
-    },
+    }, std::fmt,
 };
+
+
 
 /// Commands related to staking operations
 #[derive(Debug, Clone)]
@@ -47,6 +49,24 @@ impl StakeCommand {
         }
     }
 }
+
+impl fmt::Display for StakeCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let command = match self {
+            StakeCommand::Create => "Create",
+            StakeCommand::Delegate => "Delegate",
+            StakeCommand::Deactivate => "Deactivate",
+            StakeCommand::Withdraw => "Withdraw",
+            StakeCommand::Merge => "Merge",
+            StakeCommand::Split => "Split",
+            StakeCommand::Show => "Show",
+            StakeCommand::History => "History",
+            StakeCommand::GoBack => "Go Back",
+        };
+        write!(f, "{}", command)
+    }
+}
+
 
 impl StakeCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {

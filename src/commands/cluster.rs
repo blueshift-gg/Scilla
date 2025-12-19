@@ -3,11 +3,7 @@ use {
         commands::CommandExec, constants::LAMPORTS_PER_SOL, context::ScillaContext,
         error::ScillaResult, ui::show_spinner,
     },
-    ::{
-        comfy_table::{Cell, Table, presets::UTF8_FULL},
-        console::style,
-        std::ops::Div,
-    },
+    comfy_table::{Cell, Table, presets::UTF8_FULL}, console::style, std::{fmt, ops::Div},
 };
 
 /// Commands related to cluster operations
@@ -37,6 +33,23 @@ impl ClusterCommand {
             ClusterCommand::Inflation => "Fetching inflation parameters…",
             ClusterCommand::GoBack => "Going back…",
         }
+    }
+}
+
+impl fmt::Display for ClusterCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let command = match self {
+            ClusterCommand::EpochInfo => "Epoch Info",
+            ClusterCommand::CurrentSlot => "Current Slot",
+            ClusterCommand::BlockHeight => "Block Height",
+            ClusterCommand::BlockTime => "Block Time",
+            ClusterCommand::Validators => "Validators",
+            ClusterCommand::ClusterVersion => "Cluster Version",
+            ClusterCommand::SupplyInfo => "Supply Info",
+            ClusterCommand::Inflation => "Inflation",
+            ClusterCommand::GoBack => "Go Back",
+        };
+        write!(f, "{}", command)
     }
 }
 

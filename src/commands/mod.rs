@@ -8,7 +8,7 @@ use {
         error::ScillaResult,
     },
     console::style,
-    std::process::{ExitCode, Termination},
+    std::{fmt, process::{ExitCode, Termination}},
 };
 
 pub mod account;
@@ -50,5 +50,29 @@ impl Command {
             Command::ScillaConfig(_config_command) => todo!(),
             Command::Exit => Ok(CommandExec::Exit),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum CommandGroup {
+    Account,
+    Cluster,
+    Stake,
+    Vote,
+    ScillaConfig,
+    Exit,
+}
+
+impl fmt::Display for CommandGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let command = match self {
+            CommandGroup::Account => "Account",
+            CommandGroup::Cluster => "Cluster",
+            CommandGroup::Stake => "Stake",
+            CommandGroup::Vote => "Vote",
+            CommandGroup::ScillaConfig => "ScillaConfig",
+            CommandGroup::Exit => "Exit",
+        };
+        write!(f, "{}", command)
     }
 }

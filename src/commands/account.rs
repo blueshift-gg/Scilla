@@ -14,7 +14,7 @@ use {
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
-    solana_signature::Signature,
+    solana_signature::Signature, std::fmt,
 };
 
 /// Commands related to wallet or account management
@@ -42,6 +42,22 @@ impl AccountCommand {
             AccountCommand::NonceAccount => "Inspecting or managing durable nonces…",
             AccountCommand::GoBack => "Going back…",
         }
+    }
+}
+
+impl fmt::Display for AccountCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let command = match self {
+            AccountCommand::FetchAccount => "Fetch Account",
+            AccountCommand::Balance => "Balance",
+            AccountCommand::Transfer => "Transfer",
+            AccountCommand::Airdrop => "Airdrop",
+            AccountCommand::CheckTransactionConfirmation => "Check Transaction Confirmation",
+            AccountCommand::LargestAccounts => "Largest Accounts",
+            AccountCommand::NonceAccount => "Nonce Account",
+            AccountCommand::GoBack => "Go Back",
+        };
+        write!(f, "{}", command)
     }
 }
 

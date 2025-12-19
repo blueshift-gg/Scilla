@@ -8,17 +8,10 @@ use {
         },
         prompt::prompt_data,
         ui::show_spinner,
-    },
-    ::console::style,
-    anyhow::{anyhow, bail},
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
-    solana_keypair::{Keypair, Signer},
-    solana_pubkey::Pubkey,
-    solana_vote_program::{
+    }, anyhow::{anyhow, bail}, comfy_table::{Cell, Table, presets::UTF8_FULL}, ::console::style, solana_keypair::{Keypair, Signer}, solana_pubkey::Pubkey, solana_vote_program::{
         vote_instruction::{self, CreateVoteAccountConfig, withdraw},
         vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
-    },
-    std::path::PathBuf,
+    }, std::{fmt, path::PathBuf}
 };
 
 /// Commands related to validator/vote account operations
@@ -40,6 +33,19 @@ impl VoteCommand {
             VoteCommand::ShowVoteAccount => "Fetching vote account details…",
             VoteCommand::GoBack => "Going back…",
         }
+    }
+}
+
+impl fmt::Display for VoteCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            VoteCommand::CreateVoteAccount => "Create Vote Account",
+            VoteCommand::AuthorizeVoter => "Authorize Voter",
+            VoteCommand::WithdrawFromVoteAccount => "Withdraw From Vote Account",
+            VoteCommand::ShowVoteAccount => "Show Vote Account",
+            VoteCommand::GoBack => "Go Back",
+        };
+        write!(f, "{}", text)
     }
 }
 
