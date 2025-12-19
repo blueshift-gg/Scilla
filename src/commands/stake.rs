@@ -95,7 +95,15 @@ impl StakeCommand {
             StakeCommand::Merge => todo!(),
             StakeCommand::Split => todo!(),
             StakeCommand::Show => todo!(),
-            StakeCommand::History => todo!(),
+            StakeCommand::History => {
+                let stake_pubkey: Pubkey =
+                    prompt_data("Enter Stake Account Pubkey to view history:")?;
+                show_spinner(
+                    self.spinner_msg(),
+                    process_stake_history(ctx, &stake_pubkey),
+                )
+                .await?;
+            }
             StakeCommand::GoBack => return Ok(CommandExec::GoBack),
         }
 
@@ -246,5 +254,9 @@ async fn process_withdraw_stake(
         style(format!("Signature: {}", signature)).cyan()
     );
 
+    Ok(())
+}
+
+async fn process_stake_history(_ctx: &ScillaContext, _stake_pubkey: &Pubkey) -> anyhow::Result<()> {
     Ok(())
 }
