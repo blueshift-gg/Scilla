@@ -5,12 +5,13 @@ use {
         misc::helpers::{bincode_deserialize, lamports_to_sol, sol_to_lamports},
         prompt::prompt_input_data,
         ui::{print_error, show_spinner},
-        constants::{LAMPORTS_PER_SOL, MAX_TRANSFER_SOL},
+        constants::LAMPORTS_PER_SOL,
     },
     anyhow::bail,
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::Select,
+    solana_message::Message,
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
@@ -18,7 +19,6 @@ use {
     solana_signature::Signature,
     solana_system_interface::instruction::transfer,
     solana_transaction::Transaction,
-    solana_message::Message,
 };
 
 
@@ -78,24 +78,7 @@ impl AccountCommand {
             AccountCommand::Transfer => {
                 let to: Pubkey = prompt_input_data("Enter recipient Pubkey:");
                 let amount: f64 = prompt_input_data("Enter amount (SOL):");
-                if amount > MAX_TRANSFER_SOL {
-                    print_error(format!("Amount exceeds maximum allowed limit of {} SOL", MAX_TRANSFER_SOL));
-                } else {
-                    let result = show_spinner(self.spinner_msg(), transfer_sol(ctx, to, amount)).await;
-                    // show_spinner returns (), it prints errors internally if needed?
-                    // Wait, check ui.rs: show_spinner returns nothing, but it processes Result inside.
-                    // The old code had: let res = show_spinner(...); if let Err(e) == res ...
-                    // ui.rs definition: pub async fn show_spinner<F, T>(message: &str, fut: F)
-                    // It does NOT return the result of the future. It swallows it and prints "Done" or "Error".
-                    // So we don't need to check result here if show_spinner handles printing.
-                    // The incoming implementation tried to check result?
-                    // Incoming: let res = show_spinner(...); ...
-                    // HEAD implementation of show_spinner returns (), so incoming call was likely wrong for this version of show_spinner?
-                    // No, look closely at ui.rs: `pub async fn show_spinner<F, T>(...)` no return type specified -> returns ().
-                    // So `let res = show_spinner(...)` would be unit `()`.
-                    // So checking `if let Err(e) = res` would fail compilation.
-                    // So we just call it.
-                }
+                show_spinner(self.spinner_msg(), transfer_sol(ctx, to, amount)).await;
             }
             AccountCommand::Airdrop => {
                 show_spinner(self.spinner_msg(), request_sol_airdrop(ctx)).await;
@@ -285,11 +268,18 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
     Ok(())
 }
 
-async fn transfer_sol(ctx: &ScillaContext, to: Pubkey, amount_sol: f64) -> anyhow::Result<()> {
-    let lamports = (amount_sol * LAMPORTS_PER_SOL as f64) as u64;
-    let from_pubkey = ctx.pubkey();
+async fn transfer_sol(ctx: &ScillaContext, receiver: Pubkey, amount_sol: f64) -> anyhow::Result<()> {
+    let lamports = sol_to_lamports(amount_sol);
     
-    let instruction = transfer(&from_pubkey, &to, lamports);
+    // Validate transfer amount
+    let balance = ctx.rpc().get_balance(ctx.pubkey()).await?;
+    if lamports > balance {
+        bail!("Insufficient balance. You have {} SOL but tried to send {} SOL", 
+              lamports_to_sol(balance), amount_sol);
+    }
+    
+    let from_pubkey = ctx.pubkey();
+    let instruction = transfer(&from_pubkey, &receiver, lamports);
     let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
     
     let message = Message::new(&[instruction], Some(from_pubkey));
