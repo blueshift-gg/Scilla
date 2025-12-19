@@ -80,7 +80,7 @@ Manage wallets and on-chain accounts.
 | **Balance**             | Check SOL balance                    | Done   |
 | **Transfer**            | Send SOL to another wallet           | Todo   |
 | **Airdrop**             | Request devnet/testnet SOL           | Done   |
-| **Confirm Transaction** | Check if a transaction landed        | Done   |
+| **Check Transaction Confirmation** | Check if a transaction landed        | Done   |
 | **Largest Accounts**    | See the biggest accounts on cluster  | Done   |
 | **Nonce Account**       | Inspect or manage durable nonces     | Done   |
 
