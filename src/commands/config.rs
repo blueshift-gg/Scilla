@@ -9,7 +9,7 @@ use {
     console::style,
     inquire::{Confirm, Select},
     solana_commitment_config::CommitmentLevel,
-    std::{fs,fmt, path::PathBuf},
+    std::{fmt, fs, path::PathBuf},
 };
 
 /// Commands related to configuration like RPC_URL , KEYAPAIR_PATH etc
