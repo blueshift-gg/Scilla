@@ -18,15 +18,7 @@ pub mod misc;
 pub mod prompt;
 pub mod ui;
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> ScillaResult<()> {
-    println!(
-        "{}",
-        style("⚡ Scilla — Hacking Through the Solana Matrix")
-            .bold()
-            .cyan()
-    );
-
+async fn initialize_config() -> anyhow::Result<ScillaConfig> {
     let config_path = scilla_config_path();
     if !config_path.exists() {
         println!(
@@ -52,11 +44,19 @@ async fn main() -> ScillaResult<()> {
         );
     }
 
-    let config = match ScillaConfig::load() {
-        Ok(config) => config,
-        Err(e) => return Err(e.into()),
-    };
+    Ok(ScillaConfig::load()?)
+}
 
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> ScillaResult<()> {
+    println!(
+        "{}",
+        style("⚡ Scilla — Hacking Through the Solana Matrix")
+            .bold()
+            .cyan()
+    );
+
+    let config = initialize_config().await?;
     let ctx = ScillaContext::from_config(config)?;
 
     loop {

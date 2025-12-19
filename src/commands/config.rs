@@ -57,9 +57,7 @@ impl ConfigCommand {
             ConfigCommand::Edit => {
                 edit_config().await?;
             }
-            ConfigCommand::GoBack => {
-                return Ok(CommandExec::GoBack);
-            }
+            ConfigCommand::GoBack => return Ok(CommandExec::GoBack),
         };
 
         Ok(CommandExec::Process(()))
@@ -79,7 +77,7 @@ async fn show_config() -> anyhow::Result<()> {
         .add_row(vec![Cell::new("RPC URL"), Cell::new(config.rpc_url)])
         .add_row(vec![
             Cell::new("Commitment Level"),
-            Cell::new(format!("{:?}", config.commitment_level)),
+            Cell::new(config.commitment_level.to_string()),
         ])
         .add_row(vec![
             Cell::new("Keypair Path"),
@@ -127,16 +125,15 @@ pub async fn generate_config() -> anyhow::Result<()> {
         println!("  Default keypair: {}", config.keypair_path.display());
 
         let keypair_path = loop {
-            let keypair_prompt = format!(
+            let keypair_input: PathBuf = prompt_data(&format!(
                 "\nEnter keypair path (press Enter for default: {}): ",
                 config.keypair_path.display()
-            );
-            let keypair_input: String = prompt_data(&keypair_prompt)?;
+            ))?;
 
-            let keypair_path = if keypair_input.is_empty() {
+            let keypair_path = if keypair_input.as_os_str().is_empty() {
                 config.keypair_path.clone()
             } else {
-                PathBuf::from(keypair_input)
+                keypair_input
             };
 
             if !keypair_path.exists() {
@@ -157,25 +154,22 @@ pub async fn generate_config() -> anyhow::Result<()> {
         config.keypair_path = keypair_path;
         config
     } else {
-        let rpc_options = vec![
-            format!("Devnet ({})", DEVNET_RPC),
-            format!("Mainnet ({})", MAINNET_RPC),
-            format!("Testnet ({})", TESTNET_RPC),
-            "Custom".to_string(),
-        ];
+        let cluster_options = vec!["Devnet", "Mainnet", "Testnet", "Custom"];
+        let cluster_choice = Select::new("Select cluster:", cluster_options).prompt()?;
 
-        let rpc_choice = Select::new("Select RPC endpoint:", rpc_options).prompt()?;
-
-        let rpc_url = match rpc_choice.as_str() {
-            s if s.starts_with("Devnet") => DEVNET_RPC.to_string(),
-            s if s.starts_with("Mainnet") => MAINNET_RPC.to_string(),
-            s if s.starts_with("Testnet") => TESTNET_RPC.to_string(),
-            _ => prompt_data("Enter RPC URL:")?,
+        let rpc_url = match cluster_choice {
+            "Devnet" => DEVNET_RPC.to_string(),
+            "Mainnet" => MAINNET_RPC.to_string(),
+            "Testnet" => TESTNET_RPC.to_string(),
+            "Custom" => prompt_data("Enter custom RPC URL:")?,
+            _ => unreachable!(),
         };
 
-        let commitment_options = vec!["Processed", "Confirmed", "Finalized"];
-        let commitment_choice =
-            Select::new("Select commitment level:", commitment_options).prompt()?;
+        let commitment_choice = Select::new(
+            "Select commitment level:",
+            vec!["Processed", "Confirmed", "Finalized"],
+        )
+        .prompt()?;
 
         let commitment_level = match commitment_choice {
             "Processed" => CommitmentLevel::Processed,
@@ -184,18 +178,17 @@ pub async fn generate_config() -> anyhow::Result<()> {
             _ => unreachable!(),
         };
 
-        let default_keypair = ScillaConfig::default().keypair_path;
+        let default_keypair_path = ScillaConfig::default().keypair_path;
 
         let keypair_path = loop {
-            let keypair_prompt = format!(
+            let keypair_input: PathBuf = prompt_data(&format!(
                 "Enter keypair path (default: {}): ",
-                default_keypair.display()
-            );
-            let keypair_input: String = prompt_data(&keypair_prompt)?;
-            let keypair_path = if keypair_input.is_empty() {
-                default_keypair.clone()
+                default_keypair_path.display()
+            ))?;
+            let keypair_path = if keypair_input.as_os_str().is_empty() {
+                default_keypair_path.clone()
             } else {
-                PathBuf::from(keypair_input)
+                keypair_input
             };
 
             if !keypair_path.exists() {
@@ -246,78 +239,81 @@ async fn edit_config() -> anyhow::Result<()> {
 
     println!("\n{}", style("Edit Config").green().bold());
 
-    // Edit RPC URL
-    println!("\n{}", style("Current RPC URL:").cyan());
-    println!("{}", config.rpc_url);
+    // Show current configuration
+    println!("\n{} {}", style("Current RPC URL:").cyan(), config.rpc_url);
+    println!(
+        "{} {:?}",
+        style("Current Commitment Level:").cyan(),
+        config.commitment_level
+    );
+    println!(
+        "{} {}",
+        style("Current Keypair Path:").cyan(),
+        config.keypair_path.display()
+    );
 
-    let rpc_options = vec![
-        format!("Devnet ({})", DEVNET_RPC),
-        format!("Mainnet ({})", MAINNET_RPC),
-        format!("Testnet ({})", TESTNET_RPC),
-        "Custom".to_string(),
-        "Keep current".to_string(),
-    ];
+    // Prompt user to select which field to edit
+    let field_options = vec!["RPC URL", "Commitment Level", "Keypair Path"];
+    let field_choice = Select::new("\nSelect field to edit:", field_options).prompt()?;
 
-    let rpc_choice = Select::new("Select RPC endpoint:", rpc_options).prompt()?;
+    match field_choice {
+        "RPC URL" => {
+            let cluster_options = vec!["Devnet", "Mainnet", "Testnet", "Custom"];
+            let cluster_choice = Select::new("Select cluster:", cluster_options).prompt()?;
 
-    match rpc_choice.as_str() {
-        s if s.starts_with("Devnet") => config.rpc_url = DEVNET_RPC.to_string(),
-        s if s.starts_with("Mainnet") => config.rpc_url = MAINNET_RPC.to_string(),
-        s if s.starts_with("Testnet") => config.rpc_url = TESTNET_RPC.to_string(),
-        "Custom" => config.rpc_url = prompt_data("Enter RPC URL:")?,
-        _ => {}
-    }
-
-    println!("\n{}", style("Current Commitment Level:").cyan());
-    println!("{:?}", config.commitment_level);
-
-    let commitment_options = vec!["Processed", "Confirmed", "Finalized", "Keep current"];
-    let commitment_choice = Select::new("Select commitment level:", commitment_options).prompt()?;
-
-    match commitment_choice {
-        "Processed" => config.commitment_level = CommitmentLevel::Processed,
-        "Confirmed" => config.commitment_level = CommitmentLevel::Confirmed,
-        "Finalized" => config.commitment_level = CommitmentLevel::Finalized,
-        _ => {}
-    }
-
-    println!("\n{}", style("Current Keypair Path:").cyan());
-    println!("{}", config.keypair_path.display());
-
-    let edit_keypair = Confirm::new("Edit keypair path?")
-        .with_default(false)
-        .prompt()?;
-
-    if edit_keypair {
-        let default_keypair = ScillaConfig::default().keypair_path;
-
-        loop {
-            let keypair_prompt = format!(
-                "Enter new keypair path (default: {}): ",
-                default_keypair.display()
-            );
-            let keypair_input: String = prompt_data(&keypair_prompt)?;
-            let keypair_path = if keypair_input.is_empty() {
-                default_keypair.clone()
-            } else {
-                PathBuf::from(keypair_input)
+            config.rpc_url = match cluster_choice {
+                "Devnet" => DEVNET_RPC.to_string(),
+                "Mainnet" => MAINNET_RPC.to_string(),
+                "Testnet" => TESTNET_RPC.to_string(),
+                "Custom" => prompt_data("Enter custom RPC URL:")?,
+                _ => unreachable!(),
             };
-
-            if !keypair_path.exists() {
-                println!(
-                    "{}",
-                    style(format!(
-                        "Keypair file not found at: {}",
-                        keypair_path.display()
-                    ))
-                    .red()
-                );
-                continue;
-            }
-
-            config.keypair_path = keypair_path;
-            break;
         }
+        "Commitment Level" => {
+            let commitment_choice = Select::new(
+                "Select commitment level:",
+                vec!["Processed", "Confirmed", "Finalized"],
+            )
+            .prompt()?;
+
+            config.commitment_level = match commitment_choice {
+                "Processed" => CommitmentLevel::Processed,
+                "Confirmed" => CommitmentLevel::Confirmed,
+                "Finalized" => CommitmentLevel::Finalized,
+                _ => unreachable!(),
+            };
+        }
+        "Keypair Path" => {
+            let default_keypair_path = ScillaConfig::default().keypair_path;
+
+            loop {
+                let keypair_input: PathBuf = prompt_data(&format!(
+                    "Enter new keypair path (default: {}): ",
+                    default_keypair_path.display()
+                ))?;
+                let keypair_path = if keypair_input.as_os_str().is_empty() {
+                    default_keypair_path.clone()
+                } else {
+                    keypair_input
+                };
+
+                if !keypair_path.exists() {
+                    println!(
+                        "{}",
+                        style(format!(
+                            "Keypair file not found at: {}",
+                            keypair_path.display()
+                        ))
+                        .red()
+                    );
+                    continue;
+                }
+
+                config.keypair_path = keypair_path;
+                break;
+            }
+        }
+        _ => unreachable!(),
     }
 
     // Write updated config
