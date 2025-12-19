@@ -8,10 +8,17 @@ use {
         },
         prompt::prompt_data,
         ui::show_spinner,
-    }, anyhow::{anyhow, bail}, comfy_table::{Cell, Table, presets::UTF8_FULL}, ::console::style, solana_keypair::{Keypair, Signer}, solana_pubkey::Pubkey, solana_vote_program::{
+    },
+    ::console::style,
+    anyhow::{anyhow, bail},
+    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    solana_keypair::{Keypair, Signer},
+    solana_pubkey::Pubkey,
+    solana_vote_program::{
         vote_instruction::{self, CreateVoteAccountConfig, withdraw},
         vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
-    }, std::{fmt, path::PathBuf}
+    },
+    std::{fmt, path::PathBuf},
 };
 
 /// Commands related to validator/vote account operations

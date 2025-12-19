@@ -14,7 +14,8 @@ use {
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
-    solana_signature::Signature, std::fmt,
+    solana_signature::Signature,
+    std::fmt,
 };
 
 /// Commands related to wallet or account management

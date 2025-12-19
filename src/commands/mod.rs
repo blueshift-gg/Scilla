@@ -8,7 +8,10 @@ use {
         error::ScillaResult,
     },
     console::style,
-    std::{fmt, process::{ExitCode, Termination}},
+    std::{
+        fmt,
+        process::{ExitCode, Termination},
+    },
 };
 
 pub mod account;

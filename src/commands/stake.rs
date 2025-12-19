@@ -15,10 +15,9 @@ use {
         instruction::{deactivate_stake, withdraw},
         program::id as stake_program_id,
         state::StakeStateV2,
-    }, std::fmt,
+    },
+    std::fmt,
 };
-
-
 
 /// Commands related to staking operations
 #[derive(Debug, Clone)]
@@ -66,7 +65,6 @@ impl fmt::Display for StakeCommand {
         write!(f, "{}", command)
     }
 }
-
 
 impl StakeCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {

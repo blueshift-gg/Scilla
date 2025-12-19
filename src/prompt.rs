@@ -1,6 +1,7 @@
 use {
     crate::commands::{
-        Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand, stake::StakeCommand, vote::VoteCommand
+        Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
+        config::ConfigCommand, stake::StakeCommand, vote::VoteCommand,
     },
     inquire::{Select, Text},
     std::str::FromStr,
@@ -18,7 +19,6 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
         ],
     )
     .prompt()?;
-
 
     let command = match top_level {
         CommandGroup::Cluster => Command::Cluster(prompt_cluster()?),
@@ -130,4 +130,3 @@ where
     let input = Text::new(msg).prompt()?;
     T::from_str(&input).map_err(|e| anyhow::anyhow!(e.to_string()))
 }
-
