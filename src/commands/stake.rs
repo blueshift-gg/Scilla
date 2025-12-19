@@ -4,20 +4,18 @@ use {
         constants::ACTIVE_STAKE_EPOCH_BOUND,
         context::ScillaContext,
         error::ScillaResult,
-        misc::helpers::{lamports_to_sol, sol_to_lamports},
+        misc::helpers::{build_and_send_tx, lamports_to_sol, sol_to_lamports},
         prompt::prompt_data,
         ui::show_spinner,
     },
     anyhow::bail,
     console::style,
-    solana_message::Message,
     solana_pubkey::Pubkey,
     solana_stake_interface::{
         instruction::{deactivate_stake, withdraw},
         program::id as stake_program_id,
         state::StakeStateV2,
     },
-    solana_transaction::Transaction,
 };
 
 /// Commands related to staking operations
@@ -127,11 +125,7 @@ async fn process_deactivate_stake_account(
     let authorized_pubkey = ctx.pubkey();
     let instruction = deactivate_stake(stake_pubkey, authorized_pubkey);
 
-    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
-    let message = Message::new(&[instruction], Some(authorized_pubkey));
-    let transaction = Transaction::new(&[ctx.keypair()], message, recent_blockhash);
-
-    let signature = ctx.rpc().send_and_confirm_transaction(&transaction).await?;
+    let signature = build_and_send_tx(ctx, &[instruction], &[ctx.keypair()]).await?;
 
     println!(
         "\n{} {}\n{}\n{}",
@@ -154,7 +148,7 @@ async fn process_withdraw_stake(
         bail!("Withdrawal amount must be greater than 0");
     }
 
-    let lamports = sol_to_lamports(amount_sol);
+    let amount_lamports = sol_to_lamports(amount_sol);
 
     let account = ctx.rpc().get_account(stake_pubkey).await?;
 
@@ -209,7 +203,7 @@ async fn process_withdraw_stake(
         }
     }
 
-    if lamports > account.lamports {
+    if amount_lamports > account.lamports {
         bail!(
             "Insufficient balance. Have {:.6} SOL, trying to withdraw {:.6} SOL",
             lamports_to_sol(account.lamports),
@@ -219,13 +213,15 @@ async fn process_withdraw_stake(
 
     let withdrawer_pubkey = ctx.pubkey();
 
-    let instruction = withdraw(stake_pubkey, withdrawer_pubkey, recipient, lamports, None);
+    let instruction = withdraw(
+        stake_pubkey,
+        withdrawer_pubkey,
+        recipient,
+        amount_lamports,
+        None,
+    );
 
-    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
-    let message = Message::new(&[instruction], Some(withdrawer_pubkey));
-    let transaction = Transaction::new(&[ctx.keypair()], message, recent_blockhash);
-
-    let signature = ctx.rpc().send_and_confirm_transaction(&transaction).await?;
+    let signature = build_and_send_tx(ctx, &[instruction], &[ctx.keypair()]).await?;
 
     println!(
         "\n{} {}\n{}\n{}\n{}",
