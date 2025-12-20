@@ -2089,6 +2089,7 @@ dependencies = [
  "indicatif",
  "inquire",
  "serde",
+ "serde_json",
  "solana-account",
  "solana-commitment-config",
  "solana-epoch-info",

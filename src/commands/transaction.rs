@@ -10,9 +10,10 @@ use {
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::Select,
+    solana_rpc_client_api::config::RpcTransactionConfig,
     solana_signature::Signature,
     solana_transaction::versioned::VersionedTransaction,
-    solana_transaction_status::UiTransactionEncoding,
+    solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding},
     std::fmt,
 };
 
@@ -184,13 +185,20 @@ async fn process_fetch_status(ctx: &ScillaContext, signature: &Signature) -> any
 
     Ok(())
 }
+
 async fn process_fetch_transaction(
     ctx: &ScillaContext,
     signature: &Signature,
 ) -> anyhow::Result<()> {
+    let config = RpcTransactionConfig {
+        encoding: Some(UiTransactionEncoding::JsonParsed),
+        commitment: Some(ctx.rpc().commitment()),
+        max_supported_transaction_version: Some(0),
+    };
+
     let tx = ctx
         .rpc()
-        .get_transaction(signature, UiTransactionEncoding::JsonParsed)
+        .get_transaction_with_config(signature, config)
         .await?;
 
     let mut table = Table::new();
@@ -204,11 +212,14 @@ async fn process_fetch_transaction(
             Cell::new("Signature"),
             Cell::new(signature.to_string()),
         ])
-        .add_row(vec![Cell::new("Slot"), Cell::new(format!("{}", tx.slot))])
-        .add_row(vec![
+        .add_row(vec![Cell::new("Slot"), Cell::new(format!("{}", tx.slot))]);
+
+    if let Some(block_time) = tx.block_time {
+        table.add_row(vec![
             Cell::new("Block Time"),
-            Cell::new(format!("{:?}", tx.block_time)),
+            Cell::new(format!("{}", block_time)),
         ]);
+    }
 
     if let Some(meta) = &tx.transaction.meta {
         table.add_row(vec![
@@ -227,6 +238,82 @@ async fn process_fetch_transaction(
 
     println!("\n{}", style("TRANSACTION DETAILS").green().bold());
     println!("{}", table);
+
+    if let EncodedTransaction::Json(ui_tx) = &tx.transaction.transaction {
+        match &ui_tx.message {
+            UiMessage::Parsed(parsed_msg) => {
+                println!("\n{}", style("TRANSACTION MESSAGE").cyan().bold());
+
+                let mut msg_table = Table::new();
+                msg_table
+                    .load_preset(UTF8_FULL)
+                    .set_header(vec![
+                        Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+                        Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+                    ])
+                    .add_row(vec![
+                        Cell::new("Account Keys"),
+                        Cell::new(format!("{}", parsed_msg.account_keys.len())),
+                    ])
+                    .add_row(vec![
+                        Cell::new("Recent Blockhash"),
+                        Cell::new(parsed_msg.recent_blockhash.clone()),
+                    ]);
+
+                println!("{}", msg_table);
+
+                if !parsed_msg.account_keys.is_empty() {
+                    println!("\n{}", style("ACCOUNT KEYS").cyan().bold());
+                    let mut accounts_table = Table::new();
+                    accounts_table.load_preset(UTF8_FULL).set_header(vec![
+                        Cell::new("Index").add_attribute(comfy_table::Attribute::Bold),
+                        Cell::new("Pubkey").add_attribute(comfy_table::Attribute::Bold),
+                        Cell::new("Signer").add_attribute(comfy_table::Attribute::Bold),
+                        Cell::new("Writable").add_attribute(comfy_table::Attribute::Bold),
+                    ]);
+
+                    for (idx, account) in parsed_msg.account_keys.iter().enumerate() {
+                        accounts_table.add_row(vec![
+                            Cell::new(format!("{}", idx)),
+                            Cell::new(account.pubkey.clone()),
+                            Cell::new(if account.signer { "✓" } else { "" }),
+                            Cell::new(if account.writable { "✓" } else { "" }),
+                        ]);
+                    }
+                    println!("{}", accounts_table);
+                }
+            }
+            UiMessage::Raw(raw_msg) => {
+                println!("\n{}", style("TRANSACTION MESSAGE (Raw)").cyan().bold());
+
+                let mut msg_table = Table::new();
+                msg_table
+                    .load_preset(UTF8_FULL)
+                    .set_header(vec![
+                        Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+                        Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+                    ])
+                    .add_row(vec![
+                        Cell::new("Account Keys"),
+                        Cell::new(format!("{}", raw_msg.account_keys.len())),
+                    ])
+                    .add_row(vec![
+                        Cell::new("Recent Blockhash"),
+                        Cell::new(raw_msg.recent_blockhash.clone()),
+                    ]);
+
+                println!("{}", msg_table);
+
+                if !raw_msg.account_keys.is_empty() {
+                    println!("\n{}", style("ACCOUNT KEYS").cyan().bold());
+                    for (idx, key) in raw_msg.account_keys.iter().enumerate() {
+                        println!("  {}. {}", idx, key);
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
