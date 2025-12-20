@@ -51,7 +51,7 @@ impl fmt::Display for ClusterCommand {
             ClusterCommand::Inflation => "Inflation",
             ClusterCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }
 
