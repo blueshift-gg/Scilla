@@ -2,7 +2,7 @@ use {
     crate::{
         commands::CommandFlow,
         context::ScillaContext,
-        misc::helpers::{bincode_deserialize, lamports_to_sol, sol_to_lamports},
+        misc::helpers::{bincode_deserialize, build_and_send_tx, lamports_to_sol, sol_to_lamports},
         prompt::prompt_input_data,
         ui::{print_error, show_spinner},
         constants::LAMPORTS_PER_SOL,
@@ -278,20 +278,15 @@ async fn transfer_sol(ctx: &ScillaContext, receiver: Pubkey, amount_sol: f64) ->
               lamports_to_sol(balance), amount_sol);
     }
     
-    let from_pubkey = ctx.pubkey();
-    let instruction = transfer(&from_pubkey, &receiver, lamports);
-    let recent_blockhash = ctx.rpc().get_latest_blockhash().await?;
-    
-    let message = Message::new(&[instruction], Some(from_pubkey));
-    let transaction = Transaction::new(&[ctx.keypair()], message, recent_blockhash);
-    
-    let signature = ctx.rpc().send_and_confirm_transaction(&transaction).await?;
+    let instruction = transfer(ctx.pubkey(), &receiver, lamports);
+    let signature = build_and_send_tx(ctx, &[instruction]).await?;
     
     println!(
-        "\n{} {}\n{}",
+        "\n{} {}\n{}\n{}",
         style("Transfer successful!").green().bold(),
         style(format!("Amount: {} SOL", amount_sol)).cyan(),
-        style(format!("Signature: {}", signature)).yellow()
+        style(format!("Signature: {}", signature)).yellow(),
+        style(format!("Recipient Address: {}", receiver)).yellow()
     );
 
     Ok(())
