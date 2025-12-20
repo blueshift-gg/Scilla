@@ -50,7 +50,7 @@ impl Command {
             Command::Stake(stake_command) => stake_command.process_command(ctx).await,
             Command::Account(account_command) => account_command.process_command(ctx).await,
             Command::Vote(vote_command) => vote_command.process_command(ctx).await,
-            Command::ScillaConfig(config_command) => config_command.process_command(ctx).await,
+            Command::ScillaConfig(config_command) => config_command.process_command().await,
             Command::Exit => Ok(CommandExec::Exit),
         }
     }

@@ -57,12 +57,40 @@ impl Default for ScillaConfig {
 }
 
 impl ScillaConfig {
-    pub fn load() -> Result<ScillaConfig, ScillaError> {
+    pub async fn load() -> Result<ScillaConfig, ScillaError> {
         let scilla_config_path = scilla_config_path();
-        println!("Using Scilla config path : {scilla_config_path:?}");
+
         if !scilla_config_path.exists() {
-            return Err(ScillaError::ConfigPathDoesntExists);
+            use console::style;
+
+            println!(
+                "\n{}",
+                style("No configuration file found!").yellow().bold()
+            );
+            println!(
+                "{}",
+                style(format!(
+                    "Creating config at: {}",
+                    scilla_config_path.display()
+                ))
+                .cyan()
+            );
+            println!(
+                "{}",
+                style("Let's set up your configuration to get started.\n").cyan()
+            );
+
+            crate::commands::config::generate_config().await?;
+
+            println!(
+                "\n{}",
+                style("Configuration complete! Starting Scilla...\n")
+                    .green()
+                    .bold()
+            );
         }
+
+        println!("Using Scilla config path : {scilla_config_path:?}");
         let data = fs::read_to_string(scilla_config_path)?;
         let config: ScillaConfig = toml::from_str(&data)?;
         Ok(config)

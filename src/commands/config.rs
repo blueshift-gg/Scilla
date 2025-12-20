@@ -80,7 +80,7 @@ fn get_commitment_levels() -> Vec<CommitmentLevel> {
 }
 
 impl ConfigCommand {
-    pub async fn process_command(&self, _ctx: &crate::context::ScillaContext) -> ScillaResult<()> {
+    pub async fn process_command(&self) -> ScillaResult<()> {
         match self {
             ConfigCommand::Show => {
                 show_config().await?;
@@ -99,7 +99,7 @@ impl ConfigCommand {
 }
 
 async fn show_config() -> anyhow::Result<()> {
-    let config = ScillaConfig::load()?;
+    let config = ScillaConfig::load().await?;
 
     let mut table = Table::new();
     table
@@ -221,7 +221,7 @@ pub async fn generate_config() -> anyhow::Result<()> {
 }
 
 async fn edit_config() -> anyhow::Result<()> {
-    let mut config = ScillaConfig::load()?;
+    let mut config = ScillaConfig::load().await?;
 
     println!("\n{}", style("Edit Config").green().bold());
 
