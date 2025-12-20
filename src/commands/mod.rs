@@ -76,6 +76,6 @@ impl fmt::Display for CommandGroup {
             CommandGroup::ScillaConfig => "ScillaConfig",
             CommandGroup::Exit => "Exit",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }

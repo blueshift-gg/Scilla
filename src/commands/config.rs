@@ -1,5 +1,5 @@
 use {
-    crate::{ScillaContext, ScillaResult, commands::CommandExec},
+    crate::{commands::CommandExec, ScillaContext, ScillaResult},
     std::fmt,
 };
 /// Commands related to configuration like RPC_URL , KEYAPAIR_PATH etc
@@ -30,7 +30,7 @@ impl fmt::Display for ConfigCommand {
             ConfigCommand::Edit => "Edit ScillaConfig",
             ConfigCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }
 

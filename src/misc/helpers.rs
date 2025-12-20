@@ -1,5 +1,5 @@
 use {
-    crate::{ScillaContext, constants::LAMPORTS_PER_SOL},
+    crate::{constants::LAMPORTS_PER_SOL, ScillaContext},
     anyhow::{anyhow, bail},
     solana_instruction::Instruction,
     solana_keypair::{EncodableKey, Keypair, Signature, Signer},
@@ -13,13 +13,10 @@ pub fn trim_and_parse<T: FromStr>(s: &str, field_name: &str) -> anyhow::Result<O
     if trimmed.is_empty() {
         Ok(None)
     } else {
-        trimmed.parse().map(Some).map_err(|_| {
-            anyhow!(
-                "Invalid {}: {}. Must be a valid number",
-                field_name,
-                trimmed
-            )
-        })
+        trimmed
+            .parse()
+            .map(Some)
+            .map_err(|_| anyhow!("Invalid {field_name}: {trimmed}. Must be a valid number"))
     }
 }
 
@@ -41,7 +38,7 @@ impl FromStr for Commission {
             None => return Ok(Commission(0)), // default to 0%
         };
         if commission > 100 {
-            bail!("Commission must be between 0 and 100, got {}", commission);
+            bail!("Commission must be between 0 and 100, got {commission}");
         }
         Ok(Commission(commission))
     }
@@ -68,10 +65,10 @@ impl FromStr for SolAmount {
             .ok_or_else(|| anyhow!("Amount cannot be empty. Please enter a SOL amount"))?;
 
         if sol <= 0.0 || !sol.is_finite() {
-            bail!("Amount must be a positive finite number, got {}", sol);
+            bail!("Amount must be a positive finite number, got {sol}");
         }
         if sol * LAMPORTS_PER_SOL as f64 > u64::MAX as f64 {
-            bail!("Amount too large: {} SOL would overflow", sol);
+            bail!("Amount too large: {sol} SOL would overflow");
         }
         Ok(SolAmount(sol))
     }

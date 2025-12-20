@@ -8,7 +8,7 @@ use {
         ui::{print_error, show_spinner},
     },
     anyhow::bail,
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
     inquire::Select,
     solana_nonce::versions::Versions,
@@ -58,7 +58,7 @@ impl fmt::Display for AccountCommand {
             AccountCommand::NonceAccount => "Nonce Account",
             AccountCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }
 
@@ -110,7 +110,7 @@ async fn request_sol_airdrop(ctx: &ScillaContext) -> anyhow::Result<()> {
             );
         }
         Err(err) => {
-            print_error(format!("Airdrop failed: {}", err));
+            print_error(format!("Airdrop failed: {err}"));
         }
     }
 
@@ -197,7 +197,7 @@ async fn confirm_transaction(ctx: &ScillaContext, signature: &Signature) -> anyh
         ]);
 
     println!("\n{}", style("TRANSACTION CONFIRMATION").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
@@ -236,12 +236,12 @@ async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
         table.add_row(vec![
             Cell::new(format!("{}", idx + 1)),
             Cell::new(account.address.clone()),
-            Cell::new(format!("{:.2}", balance_sol)),
+            Cell::new(format!("{balance_sol:.2}")),
         ]);
     }
 
     println!("\n{}", style("LARGEST ACCOUNTS").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
@@ -250,7 +250,7 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
     let account = ctx.rpc().get_account(pubkey).await?;
 
     let versions = bincode::deserialize::<Versions>(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize nonce account data: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize nonce account data: {e}"))?;
 
     let solana_nonce::state::State::Initialized(data) = versions.state() else {
         bail!("This account is not an initialized nonce account");
@@ -295,7 +295,7 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
         ]);
 
     println!("\n{}", style("NONCE ACCOUNT INFO").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
