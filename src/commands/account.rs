@@ -3,18 +3,19 @@ use {
         commands::CommandExec,
         context::ScillaContext,
         error::ScillaResult,
-        misc::helpers::lamports_to_sol,
+        misc::helpers::{build_and_send_tx, lamports_to_sol, sol_to_lamports, SolAmount},
         prompt::prompt_data,
         ui::{print_error, show_spinner},
     },
     anyhow::bail,
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
     inquire::Select,
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
     solana_signature::Signature,
+    solana_system_interface::instruction::transfer,
     std::fmt,
 };
 
@@ -58,7 +59,7 @@ impl fmt::Display for AccountCommand {
             AccountCommand::NonceAccount => "Nonce Account",
             AccountCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }
 
@@ -74,7 +75,13 @@ impl AccountCommand {
                 show_spinner(self.spinner_msg(), fetch_account_balance(ctx, &pubkey)).await?;
             }
             AccountCommand::Transfer => {
-                // show_spinner(self.spinner_msg(), todo!()).await?;
+                let recipient: Pubkey = prompt_data("Enter recipient address:")?;
+                let amount: SolAmount = prompt_data("Enter amount to transfer (SOL):")?;
+                show_spinner(
+                    self.spinner_msg(),
+                    process_transfer(ctx, &recipient, amount.value()),
+                )
+                .await?;
             }
             AccountCommand::Airdrop => {
                 show_spinner(self.spinner_msg(), request_sol_airdrop(ctx)).await?;
@@ -110,7 +117,7 @@ async fn request_sol_airdrop(ctx: &ScillaContext) -> anyhow::Result<()> {
             );
         }
         Err(err) => {
-            print_error(format!("Airdrop failed: {}", err));
+            print_error(format!("Airdrop failed: {err}"));
         }
     }
 
@@ -197,7 +204,7 @@ async fn confirm_transaction(ctx: &ScillaContext, signature: &Signature) -> anyh
         ]);
 
     println!("\n{}", style("TRANSACTION CONFIRMATION").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
@@ -236,12 +243,12 @@ async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
         table.add_row(vec![
             Cell::new(format!("{}", idx + 1)),
             Cell::new(account.address.clone()),
-            Cell::new(format!("{:.2}", balance_sol)),
+            Cell::new(format!("{balance_sol:.2}")),
         ]);
     }
 
     println!("\n{}", style("LARGEST ACCOUNTS").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
@@ -250,7 +257,7 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
     let account = ctx.rpc().get_account(pubkey).await?;
 
     let versions = bincode::deserialize::<Versions>(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize nonce account data: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize nonce account data: {e}"))?;
 
     let solana_nonce::state::State::Initialized(data) = versions.state() else {
         bail!("This account is not an initialized nonce account");
@@ -295,7 +302,36 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
         ]);
 
     println!("\n{}", style("NONCE ACCOUNT INFO").green().bold());
-    println!("{}", table);
+    println!("{table}");
+
+    Ok(())
+}
+
+async fn process_transfer(
+    ctx: &ScillaContext,
+    recipient: &Pubkey,
+    amount_sol: f64,
+) -> anyhow::Result<()> {
+    let lamports = sol_to_lamports(amount_sol);
+    let balance = ctx.rpc().get_balance(ctx.pubkey()).await?;
+    if lamports > balance {
+        bail!(
+            "Insufficient balance. Have {:.6} SOL, trying to send {:.6} SOL",
+            lamports_to_sol(balance),
+            amount_sol
+        );
+    }
+
+    let instruction = transfer(ctx.pubkey(), recipient, lamports);
+    let signature = build_and_send_tx(ctx, &[instruction], &[ctx.keypair()]).await?;
+
+    println!(
+        "\n{}\n{}\n{}\n{}",
+        style("Transfer Successful!").green().bold(),
+        style(format!("To: {recipient}")).yellow(),
+        style(format!("Amount: {amount_sol} SOL")).cyan(),
+        style(format!("Signature: {signature}")).cyan()
+    );
 
     Ok(())
 }

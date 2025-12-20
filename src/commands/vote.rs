@@ -1,20 +1,20 @@
 use {
     crate::{
-        ScillaContext, ScillaResult,
         commands::CommandExec,
         misc::helpers::{
-            Commission, SolAmount, build_and_send_tx, lamports_to_sol, read_keypair_from_path,
+            build_and_send_tx, lamports_to_sol, read_keypair_from_path, Commission, SolAmount,
         },
         prompt::prompt_data,
         ui::show_spinner,
+        ScillaContext, ScillaResult,
     },
     ::console::style,
     anyhow::{anyhow, bail},
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     solana_keypair::{Keypair, Signer},
     solana_pubkey::Pubkey,
     solana_vote_program::{
-        vote_instruction::{self, CreateVoteAccountConfig, withdraw},
+        vote_instruction::{self, withdraw, CreateVoteAccountConfig},
         vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
     },
     std::{fmt, path::PathBuf},
@@ -51,7 +51,7 @@ impl fmt::Display for VoteCommand {
             VoteCommand::ShowVoteAccount => "Show Vote Account",
             VoteCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", text)
+        write!(f, "{text}")
     }
 }
 
@@ -151,28 +151,21 @@ async fn process_create_vote_account(
 
     if fee_payer_pubkey == &vote_account_pubkey {
         bail!(
-            "Fee payer {} cannot be the same as vote account {}",
-            fee_payer_pubkey,
-            vote_account_pubkey
+            "Fee payer {fee_payer_pubkey} cannot be the same as vote account {vote_account_pubkey}"
         );
     }
     if vote_account_pubkey == identity_pubkey {
         bail!(
-            "Vote account {} cannot be the same as identity {}",
-            vote_account_pubkey,
-            identity_pubkey
+            "Vote account {vote_account_pubkey} cannot be the same as identity {identity_pubkey}"
         );
     }
 
     // checking if vote account already exists
     if let Ok(response) = ctx.rpc().get_account(&vote_account_pubkey).await {
         let err_msg = if response.owner == solana_vote_program::id() {
-            format!("Vote account {} already exists", vote_account_pubkey)
+            format!("Vote account {vote_account_pubkey} already exists")
         } else {
-            format!(
-                "Account {} already exists and is not a vote account",
-                vote_account_pubkey
-            )
+            format!("Account {vote_account_pubkey} already exists and is not a vote account")
         };
         bail!(err_msg)
     }
@@ -231,10 +224,10 @@ async fn process_authorize_voter(
         .rpc()
         .get_account(vote_account_pubkey)
         .await
-        .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
+        .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
 
     if vote_account.owner != solana_vote_program::id() {
-        bail!("{} is not a vote account", vote_account_pubkey);
+        bail!("{vote_account_pubkey} is not a vote account");
     }
 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
@@ -290,10 +283,10 @@ async fn process_sol_withdraw_from_vote_account(
         .rpc()
         .get_account(vote_account_pubkey)
         .await
-        .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
+        .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
 
     if vote_account.owner != solana_vote_program::id() {
-        bail!("{} is not a vote account", vote_account_pubkey);
+        bail!("{vote_account_pubkey} is not a vote account");
     }
 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
@@ -334,10 +327,10 @@ async fn process_fetch_vote_account(
         .rpc()
         .get_account(vote_account_pubkey)
         .await
-        .map_err(|_| anyhow!("{} account does not exist", vote_account_pubkey))?;
+        .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
 
     if vote_account.owner != solana_vote_program::id() {
-        bail!("{} is not a vote account", vote_account_pubkey);
+        bail!("{vote_account_pubkey} is not a vote account");
     }
 
     let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
@@ -370,7 +363,7 @@ async fn process_fetch_vote_account(
         ])
         .add_row(vec![
             Cell::new("Account Balance"),
-            Cell::new(format!("{} SOL", balance_sol)),
+            Cell::new(format!("{balance_sol} SOL")),
         ])
         .add_row(vec![
             Cell::new("Validator Identity"),
@@ -402,7 +395,7 @@ async fn process_fetch_vote_account(
         ]);
 
     println!("\n{}", style("VOTE ACCOUNT INFORMATION").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }

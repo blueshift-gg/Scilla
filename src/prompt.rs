@@ -1,7 +1,7 @@
 use {
     crate::commands::{
-        Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
-        config::ConfigCommand, stake::StakeCommand, vote::VoteCommand,
+        account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
+        stake::StakeCommand, vote::VoteCommand, Command, CommandGroup,
     },
     inquire::{Select, Text},
     std::str::FromStr,

@@ -3,7 +3,7 @@ use {
         commands::CommandExec, constants::LAMPORTS_PER_SOL, context::ScillaContext,
         error::ScillaResult, ui::show_spinner,
     },
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
     std::{fmt, ops::Div},
 };
@@ -51,7 +51,7 @@ impl fmt::Display for ClusterCommand {
             ClusterCommand::Inflation => "Inflation",
             ClusterCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }
 

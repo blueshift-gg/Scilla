@@ -4,7 +4,7 @@ use {
         constants::ACTIVE_STAKE_EPOCH_BOUND,
         context::ScillaContext,
         error::ScillaResult,
-        misc::helpers::{SolAmount, build_and_send_tx, lamports_to_sol, sol_to_lamports},
+        misc::helpers::{build_and_send_tx, lamports_to_sol, sol_to_lamports, SolAmount},
         prompt::prompt_data,
         ui::show_spinner,
     },
@@ -62,7 +62,7 @@ impl fmt::Display for StakeCommand {
             StakeCommand::History => "History",
             StakeCommand::GoBack => "Go Back",
         };
-        write!(f, "{}", command)
+        write!(f, "{command}")
     }
 }
 
@@ -114,7 +114,7 @@ async fn process_deactivate_stake_account(
     }
 
     let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {e}"))?;
 
     match stake_state {
         StakeStateV2::Stake(meta, stake, _) => {
@@ -149,8 +149,8 @@ async fn process_deactivate_stake_account(
         "\n{} {}\n{}\n{}",
         style("Stake Deactivated Successfully!").green().bold(),
         style("(Cooldown will take 1-2 epochs ≈ 2-4 days)").yellow(),
-        style(format!("Stake Account: {}", stake_pubkey)).yellow(),
-        style(format!("Signature: {}", signature)).cyan()
+        style(format!("Stake Account: {stake_pubkey}")).yellow(),
+        style(format!("Signature: {signature}")).cyan()
     );
 
     Ok(())
@@ -171,7 +171,7 @@ async fn process_withdraw_stake(
     }
 
     let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {e}"))?;
 
     match stake_state {
         StakeStateV2::Stake(meta, stake, _) => {
@@ -240,10 +240,10 @@ async fn process_withdraw_stake(
     println!(
         "\n{} {}\n{}\n{}\n{}",
         style("Stake Withdrawn Successfully!").green().bold(),
-        style(format!("From Stake Account: {}", stake_pubkey)).yellow(),
-        style(format!("To Recipient: {}", recipient)).yellow(),
-        style(format!("Amount: {} SOL", amount_sol)).cyan(),
-        style(format!("Signature: {}", signature)).cyan()
+        style(format!("From Stake Account: {stake_pubkey}")).yellow(),
+        style(format!("To Recipient: {recipient}")).yellow(),
+        style(format!("Amount: {amount_sol} SOL")).cyan(),
+        style(format!("Signature: {signature}")).cyan()
     );
 
     Ok(())
