@@ -52,12 +52,6 @@ impl Default for ScillaConfig {
             rpc_url: DEVNET_RPC.to_string(),
             commitment_level: CommitmentLevel::Confirmed,
             keypair_path: default_keypair_path,
-impl ScillaConfig {
-    pub fn load() -> Result<ScillaConfig, ScillaError> {
-        let scilla_config_path = scilla_config_path();
-        println!("Using Scilla config path : {scilla_config_path:?}");
-        if !scilla_config_path.exists() {
-            return Err(ScillaError::ConfigPathDoesNotExist);
         }
     }
 }
