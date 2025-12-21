@@ -26,11 +26,11 @@ pub enum TransactionCommand {
     GoBack,
 }
 
-#[derive(Debug, Clone)]
-enum TransactionEncoding {
-    Base64,
-    Base58,
-}
+// #[derive(Debug, Clone)]
+// enum TransactionEncoding {
+//     Base64,
+//     Base58,
+// }
 
 impl TransactionCommand {
     pub fn spinner_msg(&self) -> &'static str {
@@ -56,14 +56,14 @@ impl fmt::Display for TransactionCommand {
     }
 }
 
-impl fmt::Display for TransactionEncoding {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Base64 => "Base64",
-            Self::Base58 => "Base58",
-        })
-    }
-}
+// impl fmt::Display for TransactionEncoding {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.write_str(match self {
+//             Self::Base64 => "Base64",
+//             Self::Base58 => "Base58",
+//         })
+//     }
+// }
 
 impl TransactionCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
@@ -78,7 +78,7 @@ impl TransactionCommand {
             }
             TransactionCommand::FetchStatus => {
                 let signature: Signature = prompt_data("Enter transaction signature:")?;
-                show_spinner(self.spinner_msg(), process_fetch_status(ctx, &signature)).await?;
+                show_spinner(self.spinner_msg(), process_fetch_transaction_status(ctx, &signature)).await?;
             }
             TransactionCommand::FetchTransaction => {
                 let signature: Signature = prompt_data("Enter transaction signature:")?;
@@ -91,7 +91,7 @@ impl TransactionCommand {
             TransactionCommand::SendTransaction => {
                 let encoding = Select::new(
                     "Select encoding format:",
-                    vec![TransactionEncoding::Base64, TransactionEncoding::Base58],
+                    vec![UiTransactionEncoding::Base64, UiTransactionEncoding::Base58],
                 )
                 .prompt()?;
 
@@ -148,40 +148,41 @@ async fn process_check_confirmation(
     Ok(())
 }
 
-async fn process_fetch_status(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
+async fn process_fetch_transaction_status(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
     let status = ctx.rpc().get_signature_statuses(&[*signature]).await?;
 
-    match status.value.first() {
-        Some(Some(tx_status)) => {
-            let mut table = Table::new();
-            table
-                .load_preset(UTF8_FULL)
-                .set_header(vec![
-                    Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-                ])
-                .add_row(vec![
-                    Cell::new("Signature"),
-                    Cell::new(signature.to_string()),
-                ])
-                .add_row(vec![
-                    Cell::new("Status"),
-                    Cell::new(if tx_status.err.is_none() {
-                        style("Success").green().to_string()
-                    } else {
-                        style(format!("Error: {:?}", tx_status.err))
-                            .red()
-                            .to_string()
-                    }),
-                ]);
+      let Some(Some(tx_status)) = status.value.first() else {
+        anyhow::bail!("Transaction not found");
+    };
 
-            println!("\n{}", style("TRANSACTION STATUS").green().bold());
-            println!("{}", table);
-        }
-        Some(None) | None => {
-            println!("{}", style("Transaction not found").yellow());
-        }
-    }
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Signature"),
+            Cell::new(signature.to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Slot"),
+            Cell::new(format!("{}", tx_status.slot)),
+        ])
+        .add_row(vec![
+            Cell::new("Status"),
+            Cell::new(if tx_status.err.is_none() {
+                style("Success").green().to_string()
+            } else {
+                style(format!("Error: {:?}", tx_status.err))
+                    .red()
+                    .to_string()
+            }),
+        ]);
+
+    println!("\n{}", style("TRANSACTION STATUS").green().bold());
+    println!("{}", table);
 
     Ok(())
 }
@@ -319,12 +320,13 @@ async fn process_fetch_transaction(
 
 async fn process_send_transaction(
     ctx: &ScillaContext,
-    encoding: TransactionEncoding,
+    encoding: UiTransactionEncoding,
     encoded_tx: String,
 ) -> anyhow::Result<()> {
     let tx_bytes = match encoding {
-        TransactionEncoding::Base64 => decode_base64(&encoded_tx)?,
-        TransactionEncoding::Base58 => decode_base58(&encoded_tx)?,
+        UiTransactionEncoding::Base64 => decode_base64(&encoded_tx)?,
+        UiTransactionEncoding::Base58 => decode_base58(&encoded_tx)?,
+        _ => unreachable!("Only Base64 and Base58 are provided in the menu")
     };
 
     let tx: VersionedTransaction = bincode::deserialize(&tx_bytes)
