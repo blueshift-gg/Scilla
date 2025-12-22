@@ -77,7 +77,7 @@ impl TransactionCommand {
             TransactionCommand::SendTransaction => {
                 println!(
                     "{}",
-                    style("ℹ Note: Only VersionedTransaction format is supported")
+                    style("Note: Only VersionedTransaction format is supported")
                         .yellow()
                         .dim()
                 );
