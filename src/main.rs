@@ -17,19 +17,15 @@ pub mod ui;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ScillaResult<()> {
-    let config = match ScillaConfig::load() {
-        Ok(config) => config,
-        Err(e) => return Err(e.into()),
-    };
-
-    let ctx = ScillaContext::from_config(config)?;
-
     println!(
         "{}",
         style("⚡ Scilla — Hacking Through the Solana Matrix")
             .bold()
             .cyan()
     );
+
+    let config = ScillaConfig::load().await?;
+    let ctx = ScillaContext::from_config(config)?;
 
     loop {
         let command = prompt_for_command()?;

@@ -36,7 +36,7 @@ impl AccountCommand {
         match self {
             AccountCommand::FetchAccount => "Fetching account…",
             AccountCommand::Balance => "Checking SOL balance…",
-            AccountCommand::Transfer => "Sending SOL to another wallet…",
+            AccountCommand::Transfer => "Sending SOL…",
             AccountCommand::Airdrop => "Requesting SOL on devnet/testnet…",
             AccountCommand::CheckTransactionConfirmation => "Checking transaction confirmation…",
             AccountCommand::LargestAccounts => "Fetching largest accounts on the cluster…",
@@ -49,14 +49,14 @@ impl AccountCommand {
 impl fmt::Display for AccountCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let command = match self {
-            AccountCommand::FetchAccount => "Fetch Account",
-            AccountCommand::Balance => "Balance",
-            AccountCommand::Transfer => "Transfer",
-            AccountCommand::Airdrop => "Airdrop",
-            AccountCommand::CheckTransactionConfirmation => "Check Transaction Confirmation",
-            AccountCommand::LargestAccounts => "Largest Accounts",
-            AccountCommand::NonceAccount => "Nonce Account",
-            AccountCommand::GoBack => "Go Back",
+            AccountCommand::FetchAccount => "Fetch account",
+            AccountCommand::Balance => "Check balance",
+            AccountCommand::Transfer => "Transfer SOL",
+            AccountCommand::Airdrop => "Request airdrop",
+            AccountCommand::CheckTransactionConfirmation => "Check transaction confirmation",
+            AccountCommand::LargestAccounts => "View largest accounts",
+            AccountCommand::NonceAccount => "View nonce account",
+            AccountCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
     }

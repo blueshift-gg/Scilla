@@ -49,7 +49,7 @@ impl fmt::Display for ClusterCommand {
             ClusterCommand::ClusterVersion => "Cluster Version",
             ClusterCommand::SupplyInfo => "Supply Info",
             ClusterCommand::Inflation => "Inflation",
-            ClusterCommand::GoBack => "Go Back",
+            ClusterCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
     }

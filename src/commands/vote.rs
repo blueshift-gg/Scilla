@@ -46,11 +46,11 @@ impl VoteCommand {
 impl fmt::Display for VoteCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = match self {
-            VoteCommand::CreateVoteAccount => "Create Vote Account",
-            VoteCommand::AuthorizeVoter => "Authorize Voter",
-            VoteCommand::WithdrawFromVoteAccount => "Withdraw From Vote Account",
-            VoteCommand::ShowVoteAccount => "Show Vote Account",
-            VoteCommand::GoBack => "Go Back",
+            VoteCommand::CreateVoteAccount => "Create vote account",
+            VoteCommand::AuthorizeVoter => "Authorize voter",
+            VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
+            VoteCommand::ShowVoteAccount => "Show vote account",
+            VoteCommand::GoBack => "Go back",
         };
         write!(f, "{text}")
     }

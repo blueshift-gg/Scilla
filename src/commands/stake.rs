@@ -55,15 +55,15 @@ impl StakeCommand {
 impl fmt::Display for StakeCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let command = match self {
-            StakeCommand::Create => "Create",
-            StakeCommand::Delegate => "Delegate",
-            StakeCommand::Deactivate => "Deactivate",
-            StakeCommand::Withdraw => "Withdraw",
-            StakeCommand::Merge => "Merge",
-            StakeCommand::Split => "Split",
-            StakeCommand::Show => "Show",
-            StakeCommand::History => "History",
-            StakeCommand::GoBack => "Go Back",
+            StakeCommand::Create => "Create stake account",
+            StakeCommand::Delegate => "Delegate stake",
+            StakeCommand::Deactivate => "Deactivate stake",
+            StakeCommand::Withdraw => "Withdraw stake",
+            StakeCommand::Merge => "Merge stake accounts",
+            StakeCommand::Split => "Split stake account",
+            StakeCommand::Show => "Show stake",
+            StakeCommand::History => "View stake history",
+            StakeCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
     }

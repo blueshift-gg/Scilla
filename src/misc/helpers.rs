@@ -108,8 +108,6 @@ pub async fn build_and_send_tx(
 }
 
 /// Fetches account data and current epoch info in parallel.
-///
-/// Reduces latency by ~100-300ms compared to sequential fetching.
 pub async fn fetch_account_with_epoch(
     ctx: &ScillaContext,
     pubkey: &Pubkey,
@@ -128,4 +126,22 @@ pub async fn fetch_account_with_epoch(
                 .map_err(anyhow::Error::from)
         }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lamports_to_sol_exact_one_sol() {
+        assert_eq!(lamports_to_sol(1_000_000_000), 1.0);
+    }
+
+    #[test]
+    fn test_lamports_to_sol_max_u64() {
+        // u64::MAX lamports should not panic or overflow
+        let result = lamports_to_sol(u64::MAX);
+        assert!(result > 0.0, "Should handle u64::MAX without panic");
+        assert!(result < f64::INFINITY, "Should not overflow to infinity");
+    }
 }
