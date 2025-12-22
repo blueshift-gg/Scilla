@@ -99,6 +99,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
             VoteCommand::AuthorizeVoter,
             VoteCommand::WithdrawFromVoteAccount,
             VoteCommand::ShowVoteAccount,
+            VoteCommand::CloseVoteAccount,
             VoteCommand::GoBack,
         ],
     )

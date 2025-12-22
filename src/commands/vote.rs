@@ -14,6 +14,7 @@ use {
     console::style,
     solana_keypair::{Keypair, Signer},
     solana_pubkey::Pubkey,
+    solana_rpc_client_api::config::RpcGetVoteAccountsConfig,
     solana_vote_program::{
         vote_instruction::{self, CreateVoteAccountConfig, withdraw},
         vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
@@ -28,6 +29,7 @@ pub enum VoteCommand {
     AuthorizeVoter,
     WithdrawFromVoteAccount,
     ShowVoteAccount,
+    CloseVoteAccount,
     GoBack,
 }
 
@@ -38,6 +40,7 @@ impl VoteCommand {
             VoteCommand::AuthorizeVoter => "Authorizing voter…",
             VoteCommand::WithdrawFromVoteAccount => "Withdrawing SOL from vote account…",
             VoteCommand::ShowVoteAccount => "Fetching vote account details…",
+            VoteCommand::CloseVoteAccount => "Closing vote account…",
             VoteCommand::GoBack => "Going back…",
         }
     }
@@ -50,6 +53,7 @@ impl fmt::Display for VoteCommand {
             VoteCommand::AuthorizeVoter => "Authorize voter",
             VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
             VoteCommand::ShowVoteAccount => "Show vote account",
+            VoteCommand::CloseVoteAccount => "Close vote account",
             VoteCommand::GoBack => "Go back",
         };
         write!(f, "{text}")
@@ -128,6 +132,25 @@ impl VoteCommand {
                 show_spinner(
                     self.spinner_msg(),
                     process_fetch_vote_account(ctx, &vote_account_pubkey),
+                )
+                .await?;
+            }
+            VoteCommand::CloseVoteAccount => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                let withdraw_authority_path: PathBuf =
+                    prompt_data("Enter Withdraw Authority Keypair Path:")?;
+                let destination_pubkey: Pubkey = prompt_data("Enter Destination Address:")?;
+
+                let withdraw_authority = read_keypair_from_path(&withdraw_authority_path)?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    close_vote_account(
+                        ctx,
+                        &vote_account_pubkey,
+                        &withdraw_authority,
+                        &destination_pubkey,
+                    ),
                 )
                 .await?;
             }
@@ -310,6 +333,58 @@ async fn process_sol_withdraw_from_vote_account(
     println!(
         "{} {}",
         style("Signature:").green().bold(),
+        style(signature).cyan()
+    );
+
+    Ok(())
+}
+
+async fn close_vote_account(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+    withdraw_authority: &Keypair,
+    destination_pubkey: &Pubkey,
+) -> anyhow::Result<()> {
+    let vote_account_status = ctx
+        .rpc()
+        .get_vote_accounts_with_config(RpcGetVoteAccountsConfig {
+            vote_pubkey: Some(vote_account_pubkey.to_string()),
+            ..RpcGetVoteAccountsConfig::default()
+        })
+        .await?;
+
+    if let Some(_vote_account) = vote_account_status
+        .current
+        .into_iter()
+        .chain(vote_account_status.delinquent)
+        .next()
+        .filter(|v| v.activated_stake != 0)
+    {
+        bail!(
+            "Cannot close vote account with active stake: {}",
+            vote_account_pubkey
+        );
+    }
+
+    let current_balance = ctx.rpc().get_balance(vote_account_pubkey).await?;
+
+    if current_balance == 0 {
+        bail!("Vote account {} has zero balance", vote_account_pubkey);
+    }
+
+    let withdraw_ix = withdraw(
+        vote_account_pubkey,
+        &withdraw_authority.pubkey(),
+        current_balance,
+        destination_pubkey,
+    );
+
+    let signature =
+        build_and_send_tx(ctx, &[withdraw_ix], &[ctx.keypair(), withdraw_authority]).await?;
+
+    println!(
+        "{} {}",
+        style("Vote account closed! Signature:").green().bold(),
         style(signature).cyan()
     );
 
