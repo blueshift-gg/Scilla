@@ -19,6 +19,7 @@ pub mod cluster;
 pub mod config;
 pub mod stake;
 pub mod vote;
+pub mod validator;
 
 pub enum CommandExec<T> {
     Process(T),
@@ -40,6 +41,7 @@ pub enum Command {
     Account(AccountCommand),
     Vote(VoteCommand),
     ScillaConfig(ConfigCommand),
+    Validator(ValidatorCommand),
     Exit,
 }
 
@@ -51,6 +53,7 @@ impl Command {
             Command::Account(account_command) => account_command.process_command(ctx).await,
             Command::Vote(vote_command) => vote_command.process_command(ctx).await,
             Command::ScillaConfig(config_command) => config_command.process_command().await,
+            Command::Validator(validator_command) => validator_command.process_command(ctx).await,
             Command::Exit => Ok(CommandExec::Exit),
         }
     }
@@ -63,6 +66,7 @@ pub enum CommandGroup {
     Stake,
     Vote,
     ScillaConfig,
+    Validator,
     Exit,
 }
 
@@ -74,6 +78,7 @@ impl fmt::Display for CommandGroup {
             CommandGroup::Stake => "Stake",
             CommandGroup::Vote => "Vote",
             CommandGroup::ScillaConfig => "ScillaConfig",
+            CommandGroup::Validator => "Validator",
             CommandGroup::Exit => "Exit",
         };
         write!(f, "{}", command)
