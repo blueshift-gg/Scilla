@@ -1,7 +1,7 @@
 use {
     crate::{
         commands::CommandExec,
-        constants::{ACTIVE_STAKE_EPOCH_BOUND, DEFAULT_EPOCH_LIMIT},
+        constants::{ACTIVE_STAKE_EPOCH_BOUND, DEFAULT_EPOCH_LIMIT, STAKE_HISTORY_SYSVAR_ADDR},
         context::ScillaContext,
         error::ScillaResult,
         misc::helpers::{SolAmount, build_and_send_tx, lamports_to_sol, sol_to_lamports},
@@ -256,10 +256,9 @@ async fn process_withdraw_stake(
 }
 
 async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
-    const STAKE_HISTORY_SYSVAR: Pubkey =
-        Pubkey::from_str_const("SysvarStakeHistory1111111111111111111111111");
+    let stake_history_sysvar = Pubkey::from_str_const(STAKE_HISTORY_SYSVAR_ADDR);
 
-    let account = ctx.rpc().get_account(&STAKE_HISTORY_SYSVAR).await?;
+    let account = ctx.rpc().get_account(&stake_history_sysvar).await?;
 
     let stake_history: StakeHistory = bincode::options()
         .with_fixint_encoding()
