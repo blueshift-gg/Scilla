@@ -184,7 +184,11 @@ pub fn decode_base58(encoded: &str) -> anyhow::Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+
+    use {
+        super::*, solana_rpc_client::nonblocking::rpc_client::RpcClient,
+        solana_transaction::versioned::VersionedTransaction,
+    };
 
     #[test]
     fn test_lamports_to_sol_exact_one_sol() {
@@ -197,5 +201,46 @@ mod tests {
         let result = lamports_to_sol(u64::MAX);
         assert!(result > 0.0, "Should handle u64::MAX without panic");
         assert!(result < f64::INFINITY, "Should not overflow to infinity");
+    }
+    #[tokio::test]
+    async fn test_memo_transaction_base64_base58_roundtrip() -> anyhow::Result<()> {
+        let rpc = RpcClient::new("https://api.devnet.solana.com".to_string());
+
+        // Memo program ID
+        let memo_program_id = Pubkey::from_str("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")?;
+
+        let payer =
+            read_keypair_from_path(dirs::home_dir().unwrap().join(".config/solana/id.json"))?;
+
+        let memo_ix = Instruction {
+            program_id: memo_program_id,
+            accounts: vec![],
+            data: b"devnet-test".to_vec(),
+        };
+
+        let recent_blockhash = rpc.get_latest_blockhash().await?;
+
+        let message = Message::new(&[memo_ix], Some(&payer.pubkey()));
+        let tx = Transaction::new(&[&payer], message, recent_blockhash);
+
+        let signature = rpc.send_and_confirm_transaction(&tx).await?;
+
+        let versioned_tx = VersionedTransaction::from(tx);
+
+        let raw = bincode::serialize(&versioned_tx)?;
+
+        let encoded_b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let encoded_b58 = bs58::encode(&raw).into_string();
+
+        let decoded_b64 = decode_base64(&encoded_b64)?;
+        let decoded_b58 = decode_base58(&encoded_b58)?;
+
+        let tx_b64: VersionedTransaction = bincode::deserialize(&decoded_b64)?;
+        let tx_b58: VersionedTransaction = bincode::deserialize(&decoded_b58)?;
+
+        assert_eq!(tx_b64.signatures[0], signature);
+        assert_eq!(tx_b58.signatures[0], signature);
+
+        Ok(())
     }
 }
