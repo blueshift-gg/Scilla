@@ -217,13 +217,11 @@ async fn process_create_stake_account(
         withdrawer: *withdraw_authority_pubkey,
     };
 
-    let lockup = &Lockup::default();
-
     let ix = instruction::create_account(
         fee_payer_pubkey,
         &stake_account_pubkey,
         &authorized,
-        lockup,
+        &Lockup::default(),
         total_lamports,
     );
 
@@ -446,9 +444,7 @@ async fn delegate_stake_account(
             ))
         };
 
-    if let Err(_err) = &sanity_check {
-        sanity_check?;
-    }
+    sanity_check?;
 
     let ix = instruction::delegate_stake(
         stake_account_pubkey,
