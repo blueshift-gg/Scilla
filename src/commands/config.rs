@@ -49,7 +49,7 @@ enum ConfigField {
     RpcUrl,
     CommitmentLevel,
     KeypairPath,
-    GoBack,
+    None, // if None is chosen , we go back to previous context 
 }
 
 impl fmt::Display for ConfigField {
