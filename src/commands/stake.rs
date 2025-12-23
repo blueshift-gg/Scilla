@@ -5,8 +5,7 @@ use {
         context::ScillaContext,
         error::ScillaResult,
         misc::helpers::{
-            SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
-            sol_to_lamports,
+            SolAmount, build_and_send_tx, deserialize_with_bincode, fetch_account_with_epoch, lamports_to_sol, sol_to_lamports
         },
         prompt::prompt_data,
         ui::show_spinner,
@@ -122,7 +121,7 @@ async fn process_deactivate_stake_account(
         bail!("Account is not owned by the stake program");
     }
 
-    let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
+    let stake_state: StakeStateV2 = deserialize_with_bincode(&account.data)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {e}"))?;
 
     match stake_state {
@@ -179,7 +178,7 @@ async fn process_withdraw_stake(
         bail!("Account is not owned by the stake program");
     }
 
-    let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
+    let stake_state: StakeStateV2 = deserialize_with_bincode(&account.data)
         .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {e}"))?;
 
     match stake_state {

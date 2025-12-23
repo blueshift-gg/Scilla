@@ -1,6 +1,6 @@
 use {
     crate::{ScillaContext, constants::LAMPORTS_PER_SOL},
-    anyhow::{anyhow, bail},
+    anyhow::{anyhow, bail, Context},
     solana_account::Account,
     solana_epoch_info::EpochInfo,
     solana_instruction::Instruction,
@@ -10,7 +10,13 @@ use {
     solana_transaction::Transaction,
     std::{path::Path, str::FromStr},
     tokio::try_join,
+    serde::de::DeserializeOwned,
 };
+
+/// Generic helper that wraps bincode::deserialize and returns anyhow::Result
+pub fn deserialize_with_bincode<T: DeserializeOwned>(data: &[u8]) -> anyhow::Result<T> {
+    bincode::deserialize(data).context("Failed to deserialize with bincode")
+}
 
 pub fn trim_and_parse<T: FromStr>(s: &str, field_name: &str) -> anyhow::Result<Option<T>> {
     let trimmed = s.trim();
