@@ -1,11 +1,25 @@
 use {
     crate::{
-        commands::CommandExec, context::ScillaContext, error::ScillaResult, prompt::prompt_data,
+        ScillaContext, ScillaResult,
+        commands::CommandExec,
+        misc::helpers::{
+            Commission, SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
+            read_keypair_from_path,
+        },
+        prompt::prompt_data,
         ui::show_spinner,
     },
+    anyhow::{anyhow, bail},
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
+    solana_keypair::{Keypair, Signer},
     solana_pubkey::Pubkey,
+    solana_rpc_client_api::config::RpcGetVoteAccountsConfig,
+    solana_vote_program::{
+        vote_instruction::{self, CreateVoteAccountConfig, withdraw},
+        vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
+    },
+    std::{fmt, path::PathBuf},
 };
 
 /// Commands related to validator/vote account operations
@@ -15,101 +29,445 @@ pub enum VoteCommand {
     AuthorizeVoter,
     WithdrawFromVoteAccount,
     ShowVoteAccount,
+    CloseVoteAccount,
     GoBack,
+}
+
+impl VoteCommand {
+    pub fn spinner_msg(&self) -> &'static str {
+        match self {
+            VoteCommand::CreateVoteAccount => "Creating vote account…",
+            VoteCommand::AuthorizeVoter => "Authorizing voter…",
+            VoteCommand::WithdrawFromVoteAccount => "Withdrawing SOL from vote account…",
+            VoteCommand::ShowVoteAccount => "Fetching vote account details…",
+            VoteCommand::CloseVoteAccount => "Closing vote account…",
+            VoteCommand::GoBack => "Going back…",
+        }
+    }
+}
+
+impl fmt::Display for VoteCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            VoteCommand::CreateVoteAccount => "Create vote account",
+            VoteCommand::AuthorizeVoter => "Authorize voter",
+            VoteCommand::WithdrawFromVoteAccount => "Withdraw from vote account",
+            VoteCommand::ShowVoteAccount => "Show vote account",
+            VoteCommand::CloseVoteAccount => "Close vote account",
+            VoteCommand::GoBack => "Go back",
+        };
+        write!(f, "{text}")
+    }
 }
 
 impl VoteCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
         match self {
-            VoteCommand::ShowVoteAccount => {
-                let pubkey: Pubkey = prompt_data("Enter Vote Account Pubkey:")?;
-                show_spinner("Show Vote Account", show_vote_account(ctx, &pubkey)).await?;
+            VoteCommand::CreateVoteAccount => {
+                let account_keypair_path: PathBuf = prompt_data("Enter Account Keypair Path:")?;
+                let identity_keypair_path: PathBuf = prompt_data("Enter Identity Keypair Path:")?;
+                let withdraw_keypair_path: PathBuf = prompt_data("Enter Withdraw Keypair Path:")?;
+                let commission: Commission = prompt_data("Enter Commission 0-100 (default 0):")?;
+
+                let account_keypair = read_keypair_from_path(&account_keypair_path)?;
+
+                let identity_keypair = read_keypair_from_path(&identity_keypair_path)?;
+
+                let withdraw_keypair = read_keypair_from_path(&withdraw_keypair_path)?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_create_vote_account(
+                        ctx,
+                        &account_keypair,
+                        &identity_keypair,
+                        &withdraw_keypair,
+                        commission.value(),
+                    ),
+                )
+                .await?;
             }
-            VoteCommand::CreateVoteAccount => todo!(),
-            VoteCommand::AuthorizeVoter => todo!(),
-            VoteCommand::WithdrawFromVoteAccount => todo!(),
+            VoteCommand::AuthorizeVoter => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                let authorized_keypair_path: PathBuf =
+                    prompt_data("Enter Authorized Keypair Path:")?;
+                let new_authorized_pubkey: Pubkey = prompt_data("Enter New Authorized Address:")?;
+
+                let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_authorize_voter(
+                        ctx,
+                        &vote_account_pubkey,
+                        &authorized_keypair,
+                        &new_authorized_pubkey,
+                    ),
+                )
+                .await?;
+            }
+            VoteCommand::WithdrawFromVoteAccount => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                let authorized_keypair_path: PathBuf =
+                    prompt_data("Enter Authorized Withdraw Keypair Path:")?;
+                let recipient_address: Pubkey = prompt_data("Enter Recipient Address:")?;
+
+                let amount: SolAmount = prompt_data("Enter withdraw amount in SOL:")?;
+                let authorized_keypair = read_keypair_from_path(&authorized_keypair_path)?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_sol_withdraw_from_vote_account(
+                        ctx,
+                        &vote_account_pubkey,
+                        &authorized_keypair,
+                        &recipient_address,
+                        amount.to_lamports(),
+                    ),
+                )
+                .await?;
+            }
+            VoteCommand::ShowVoteAccount => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                show_spinner(
+                    self.spinner_msg(),
+                    process_fetch_vote_account(ctx, &vote_account_pubkey),
+                )
+                .await?;
+            }
+            VoteCommand::CloseVoteAccount => {
+                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Address:")?;
+                let withdraw_authority_path: PathBuf =
+                    prompt_data("Enter Withdraw Authority Keypair Path:")?;
+                let destination_pubkey: Pubkey = prompt_data("Enter Destination Address:")?;
+
+                let withdraw_authority = read_keypair_from_path(&withdraw_authority_path)?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    close_vote_account(
+                        ctx,
+                        &vote_account_pubkey,
+                        &withdraw_authority,
+                        &destination_pubkey,
+                    ),
+                )
+                .await?;
+            }
             VoteCommand::GoBack => return Ok(CommandExec::GoBack),
         }
+
         Ok(CommandExec::Process(()))
     }
 }
 
-async fn show_vote_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<()> {
-    let vote_accounts = ctx.rpc().get_vote_accounts().await?;
+async fn process_create_vote_account(
+    ctx: &ScillaContext,
+    vote_account_keypair: &Keypair,
+    identity_keypair: &Keypair,
+    authorized_withdrawer: &Keypair,
+    commission: u8,
+) -> anyhow::Result<()> {
+    let vote_account_pubkey = vote_account_keypair.pubkey();
+    let identity_pubkey = identity_keypair.pubkey();
+    let withdrawer_pubkey = authorized_withdrawer.pubkey();
+    let fee_payer_pubkey = ctx.pubkey();
 
-    let vote_account = vote_accounts
-        .current
-        .iter()
-        .find(|va| va.vote_pubkey == pubkey.to_string())
-        .or_else(|| {
-            vote_accounts
-                .delinquent
-                .iter()
-                .find(|va| va.vote_pubkey == pubkey.to_string())
-        });
-
-    match vote_account {
-        Some(va) => {
-            let mut table = Table::new();
-            table
-                .load_preset(UTF8_FULL)
-                .set_header(vec![
-                    Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-                ])
-                .add_row(vec![
-                    Cell::new("Vote Account"),
-                    Cell::new(va.vote_pubkey.clone()),
-                ])
-                .add_row(vec![
-                    Cell::new("Node Pubkey"),
-                    Cell::new(va.node_pubkey.clone()),
-                ])
-                .add_row(vec![
-                    Cell::new("Commission"),
-                    Cell::new(format!("{}%", va.commission)),
-                ])
-                .add_row(vec![
-                    Cell::new("Activated Stake (SOL)"),
-                    Cell::new(format!(
-                        "{:.2}",
-                        va.activated_stake as f64 / 1_000_000_000.0
-                    )),
-                ])
-                .add_row(vec![
-                    Cell::new("Last Vote"),
-                    Cell::new(format!("{}", va.last_vote)),
-                ])
-                .add_row(vec![
-                    Cell::new("Root Slot"),
-                    Cell::new(format!("{}", va.root_slot)),
-                ])
-                .add_row(vec![
-                    Cell::new("Status"),
-                    Cell::new(
-                        if vote_accounts
-                            .current
-                            .iter()
-                            .any(|v| v.vote_pubkey == pubkey.to_string())
-                        {
-                            "Current"
-                        } else {
-                            "Delinquent"
-                        },
-                    ),
-                ]);
-
-            println!("\n{}", style("VOTE ACCOUNT INFORMATION").green().bold());
-            println!("{}", table);
-        }
-        None => {
-            println!(
-                "{} Vote account {} not found in current or delinquent validators.",
-                style("⚠").yellow(),
-                style(pubkey).cyan()
-            );
-        }
+    if fee_payer_pubkey == &vote_account_pubkey {
+        bail!(
+            "Fee payer {fee_payer_pubkey} cannot be the same as vote account {vote_account_pubkey}"
+        );
     }
+    if vote_account_pubkey == identity_pubkey {
+        bail!(
+            "Vote account {vote_account_pubkey} cannot be the same as identity {identity_pubkey}"
+        );
+    }
+
+    // checking if vote account already exists
+    if let Ok(response) = ctx.rpc().get_account(&vote_account_pubkey).await {
+        let err_msg = if response.owner == solana_vote_program::id() {
+            format!("Vote account {vote_account_pubkey} already exists")
+        } else {
+            format!("Account {vote_account_pubkey} already exists and is not a vote account")
+        };
+        bail!(err_msg)
+    }
+
+    let required_balance = ctx
+        .rpc()
+        .get_minimum_balance_for_rent_exemption(VoteStateV4::size_of())
+        .await?
+        .max(1);
+
+    let vote_init = VoteInit {
+        node_pubkey: identity_pubkey,
+        authorized_voter: identity_pubkey, // defaults to identity
+        authorized_withdrawer: withdrawer_pubkey,
+        commission,
+    };
+
+    let instructions = vote_instruction::create_account_with_config(
+        fee_payer_pubkey,
+        &vote_account_pubkey,
+        &vote_init,
+        required_balance,
+        CreateVoteAccountConfig::default(),
+    );
+
+    let signature = build_and_send_tx(
+        ctx,
+        &instructions,
+        &[ctx.keypair(), vote_account_keypair, identity_keypair],
+    )
+    .await?;
+
+    println!(
+        "{} {}",
+        style("Vote account created successfully!").green().bold(),
+        style(format!("Signature: {signature}")).cyan()
+    );
+    println!(
+        "{} {}",
+        style("Vote account address:").green(),
+        style(vote_account_pubkey).cyan()
+    );
+
+    Ok(())
+}
+
+async fn process_authorize_voter(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+    authorized_keypair: &Keypair,
+    new_authorized_pubkey: &Pubkey,
+) -> anyhow::Result<()> {
+    let authorized_pubkey = authorized_keypair.pubkey();
+
+    let (vote_account, epoch_info) = fetch_account_with_epoch(ctx, vote_account_pubkey).await?;
+
+    if vote_account.owner != solana_vote_program::id() {
+        bail!("{vote_account_pubkey} is not a vote account");
+    }
+
+    let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
+        .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
+
+    let current_epoch = epoch_info.epoch;
+
+    let current_authorized_voter = vote_state
+        .authorized_voters
+        .get_authorized_voter(current_epoch)
+        .ok_or_else(|| anyhow!("Invalid vote account state; no authorized voters found"))?;
+
+    if authorized_pubkey != current_authorized_voter
+        && authorized_pubkey != vote_state.authorized_withdrawer
+    {
+        bail!(
+            "Keypair {} is not the current authorized voter ({}) or withdrawer ({})",
+            authorized_pubkey,
+            current_authorized_voter,
+            vote_state.authorized_withdrawer
+        );
+    }
+
+    let vote_ix = vote_instruction::authorize(
+        vote_account_pubkey,
+        &authorized_pubkey,
+        new_authorized_pubkey,
+        VoteAuthorize::Voter,
+    );
+
+    let signature =
+        build_and_send_tx(ctx, &[vote_ix], &[ctx.keypair(), authorized_keypair]).await?;
+
+    println!(
+        "{} {}",
+        style("Signature:").green().bold(),
+        style(signature).cyan()
+    );
+
+    Ok(())
+}
+
+async fn process_sol_withdraw_from_vote_account(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+    authorized_withdrawer: &Keypair,
+    recipient_address: &Pubkey,
+    amount: u64,
+) -> anyhow::Result<()> {
+    let withdrawer_pubkey = authorized_withdrawer.pubkey();
+
+    let vote_account = ctx
+        .rpc()
+        .get_account(vote_account_pubkey)
+        .await
+        .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
+
+    if vote_account.owner != solana_vote_program::id() {
+        bail!("{vote_account_pubkey} is not a vote account");
+    }
+
+    let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
+        .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
+
+    if withdrawer_pubkey != vote_state.authorized_withdrawer {
+        bail!(
+            "Keypair {} is not the authorized withdrawer ({})",
+            withdrawer_pubkey,
+            vote_state.authorized_withdrawer
+        );
+    }
+
+    let withdraw_ix = withdraw(
+        vote_account_pubkey,
+        &withdrawer_pubkey,
+        amount,
+        recipient_address,
+    );
+
+    let signature =
+        build_and_send_tx(ctx, &[withdraw_ix], &[ctx.keypair(), authorized_withdrawer]).await?;
+
+    println!(
+        "{} {}",
+        style("Signature:").green().bold(),
+        style(signature).cyan()
+    );
+
+    Ok(())
+}
+
+async fn close_vote_account(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+    withdraw_authority: &Keypair,
+    destination_pubkey: &Pubkey,
+) -> anyhow::Result<()> {
+    let vote_account_status = ctx
+        .rpc()
+        .get_vote_accounts_with_config(RpcGetVoteAccountsConfig {
+            vote_pubkey: Some(vote_account_pubkey.to_string()),
+            ..RpcGetVoteAccountsConfig::default()
+        })
+        .await?;
+
+    if let Some(_vote_account) = vote_account_status
+        .current
+        .into_iter()
+        .chain(vote_account_status.delinquent)
+        .next()
+        .filter(|v| v.activated_stake != 0)
+    {
+        bail!(
+            "Cannot close vote account with active stake: {}",
+            vote_account_pubkey
+        );
+    }
+
+    let current_balance = ctx.rpc().get_balance(vote_account_pubkey).await?;
+
+    if current_balance == 0 {
+        bail!("Vote account {} has zero balance", vote_account_pubkey);
+    }
+
+    let withdraw_ix = withdraw(
+        vote_account_pubkey,
+        &withdraw_authority.pubkey(),
+        current_balance,
+        destination_pubkey,
+    );
+
+    let signature =
+        build_and_send_tx(ctx, &[withdraw_ix], &[ctx.keypair(), withdraw_authority]).await?;
+
+    println!(
+        "{} {}",
+        style("Vote account closed! Signature:").green().bold(),
+        style(signature).cyan()
+    );
+
+    Ok(())
+}
+
+async fn process_fetch_vote_account(
+    ctx: &ScillaContext,
+    vote_account_pubkey: &Pubkey,
+) -> anyhow::Result<()> {
+    let vote_account = ctx
+        .rpc()
+        .get_account(vote_account_pubkey)
+        .await
+        .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
+
+    if vote_account.owner != solana_vote_program::id() {
+        bail!("{vote_account_pubkey} is not a vote account");
+    }
+
+    let vote_state = VoteStateV4::deserialize(&vote_account.data, vote_account_pubkey)
+        .map_err(|_| anyhow!("Account data could not be deserialized to vote state"))?;
+
+    let balance_sol = lamports_to_sol(vote_account.lamports);
+
+    let root_slot = match vote_state.root_slot {
+        Some(slot) => slot.to_string(),
+        None => "~".to_string(),
+    };
+
+    let timestamp = chrono::DateTime::from_timestamp(vote_state.last_timestamp.timestamp, 0)
+        .expect("Solana timestamp should always be in valid range")
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+
+    let vote_authority = vote_state
+        .authorized_voters
+        .last()
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| vote_state.node_pubkey.to_string());
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Account Balance"),
+            Cell::new(format!("{balance_sol} SOL")),
+        ])
+        .add_row(vec![
+            Cell::new("Validator Identity"),
+            Cell::new(vote_state.node_pubkey.to_string()),
+        ])
+        .add_row(vec![Cell::new("Vote Authority"), Cell::new(vote_authority)])
+        .add_row(vec![
+            Cell::new("Withdraw Authority"),
+            Cell::new(vote_state.authorized_withdrawer.to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Credits"),
+            Cell::new(vote_state.credits().to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Commission"),
+            Cell::new(format!(
+                "{}%",
+                vote_state.inflation_rewards_commission_bps / 100
+            )),
+        ])
+        .add_row(vec![Cell::new("Root Slot"), Cell::new(root_slot)])
+        .add_row(vec![
+            Cell::new("Recent Timestamp"),
+            Cell::new(format!(
+                "{} from slot {}",
+                timestamp, vote_state.last_timestamp.slot
+            )),
+        ]);
+
+    println!("\n{}", style("VOTE ACCOUNT INFORMATION").green().bold());
+    println!("{table}");
 
     Ok(())
 }

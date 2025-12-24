@@ -3,11 +3,9 @@ use {
         commands::CommandExec, constants::LAMPORTS_PER_SOL, context::ScillaContext,
         error::ScillaResult, ui::show_spinner,
     },
-    ::{
-        comfy_table::{Cell, Table, presets::UTF8_FULL},
-        console::style,
-        std::ops::Div,
-    },
+    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    console::style,
+    std::{fmt, ops::Div},
 };
 
 /// Commands related to cluster operations
@@ -25,18 +23,35 @@ pub enum ClusterCommand {
 }
 
 impl ClusterCommand {
-    pub fn description(&self) -> &'static str {
+    pub fn spinner_msg(&self) -> &'static str {
         match self {
-            ClusterCommand::EpochInfo => "Current epoch and progress",
-            ClusterCommand::CurrentSlot => "Latest confirmed slot",
-            ClusterCommand::BlockHeight => "Current block height",
-            ClusterCommand::BlockTime => "Timestamp for a specific block",
-            ClusterCommand::Validators => "List active validators",
-            ClusterCommand::ClusterVersion => "Solana version running on cluster",
-            ClusterCommand::SupplyInfo => "Total and circulating supply",
-            ClusterCommand::Inflation => "Current inflation parameters",
-            ClusterCommand::GoBack => "Go back",
+            ClusterCommand::EpochInfo => "Fetching current epoch and progress…",
+            ClusterCommand::CurrentSlot => "Fetching latest confirmed slot…",
+            ClusterCommand::BlockHeight => "Fetching current block height…",
+            ClusterCommand::BlockTime => "Fetching block timestamp…",
+            ClusterCommand::Validators => "Fetching active validators…",
+            ClusterCommand::ClusterVersion => "Fetching cluster Solana version…",
+            ClusterCommand::SupplyInfo => "Fetching total and circulating supply…",
+            ClusterCommand::Inflation => "Fetching inflation parameters…",
+            ClusterCommand::GoBack => "Going back…",
         }
+    }
+}
+
+impl fmt::Display for ClusterCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let command = match self {
+            ClusterCommand::EpochInfo => "Epoch Info",
+            ClusterCommand::CurrentSlot => "Current Slot",
+            ClusterCommand::BlockHeight => "Block Height",
+            ClusterCommand::BlockTime => "Block Time",
+            ClusterCommand::Validators => "Validators",
+            ClusterCommand::ClusterVersion => "Cluster Version",
+            ClusterCommand::SupplyInfo => "Supply Info",
+            ClusterCommand::Inflation => "Inflation",
+            ClusterCommand::GoBack => "Go back",
+        };
+        write!(f, "{command}")
     }
 }
 
@@ -44,28 +59,28 @@ impl ClusterCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
         match self {
             ClusterCommand::EpochInfo => {
-                show_spinner(self.description(), fetch_epoch_info(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_epoch_info(ctx)).await?;
             }
             ClusterCommand::CurrentSlot => {
-                show_spinner(self.description(), fetch_current_slot(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_current_slot(ctx)).await?;
             }
             ClusterCommand::BlockHeight => {
-                show_spinner(self.description(), fetch_block_height(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_block_height(ctx)).await?;
             }
             ClusterCommand::BlockTime => {
-                show_spinner(self.description(), fetch_block_time(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_block_time(ctx)).await?;
             }
             ClusterCommand::Validators => {
-                show_spinner(self.description(), fetch_validators(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_validators(ctx)).await?;
             }
             ClusterCommand::SupplyInfo => {
-                show_spinner(self.description(), fetch_supply_info(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_supply_info(ctx)).await?;
             }
             ClusterCommand::Inflation => {
-                show_spinner(self.description(), fetch_inflation_info(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_inflation_info(ctx)).await?;
             }
             ClusterCommand::ClusterVersion => {
-                show_spinner(self.description(), fetch_cluster_version(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await?;
             }
             ClusterCommand::GoBack => {
                 return Ok(CommandExec::GoBack);

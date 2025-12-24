@@ -5,7 +5,7 @@ pub type ScillaResult<T> = anyhow::Result<CommandExec<T>>;
 #[derive(Debug, Error)]
 pub enum ScillaError {
     #[error("Scilla ScillaConfig path doesnt exists")]
-    ConfigPathDoesntExists,
+    ConfigPathDoesNotExist,
     #[error("Io error")]
     IoError(#[from] std::io::Error),
     #[error("Toml Parse error")]

@@ -80,9 +80,9 @@ Manage wallets and on-chain accounts.
 | **Balance**             | Check SOL balance                    | Done   |
 | **Transfer**            | Send SOL to another wallet           | Done   |
 | **Airdrop**             | Request devnet/testnet SOL           | Done   |
-| **Confirm Transaction** | Check if a transaction landed        | Todo   |
-| **Largest Accounts**    | See the biggest accounts on cluster  | Todo   |
-| **Nonce Account**       | Inspect or manage durable nonces     | Todo   |
+| **Check Transaction Confirmation** | Check if a transaction landed        | Done   |
+| **Largest Accounts**    | See the biggest accounts on cluster  | Done   |
+| **Nonce Account**       | Inspect or manage durable nonces     | Done   |
 
 **Example flow:**
 
@@ -103,14 +103,14 @@ Query the state of the Solana cluster.
 
 | Command             | What it does                      | Status |
 | ------------------- | --------------------------------- | ------ |
-| **Epoch Info**      | Current epoch and progress        | Todo   |
-| **Current Slot**    | Latest confirmed slot             | Todo   |
-| **Block Height**    | Current block height              | Todo   |
-| **Block Time**      | Timestamp for a specific block    | Todo   |
-| **Validators**      | List active validators            | Todo   |
-| **Cluster Version** | Solana version running on cluster | Todo   |
-| **Supply Info**     | Total and circulating supply      | Todo   |
-| **Inflation**       | Current inflation parameters      | Todo   |
+| **Epoch Info**      | Current epoch and progress        | Done   |
+| **Current Slot**    | Latest confirmed slot             | Done   |
+| **Block Height**    | Current block height              | Done   |
+| **Block Time**      | Timestamp for a specific block    | Done   |
+| **Validators**      | List active validators            | Done   |
+| **Cluster Version** | Solana version running on cluster | Done   |
+| **Supply Info**     | Total and circulating supply      | Done   |
+| **Inflation**       | Current inflation parameters      | Done   |
 
 ---
 
@@ -122,8 +122,8 @@ Full stake account lifecycle management.
 | -------------- | ----------------------------------- | ------ |
 | **Create**     | Create a new stake account          | Todo   |
 | **Delegate**   | Delegate stake to a validator       | Todo   |
-| **Deactivate** | Begin stake cooldown                | Todo   |
-| **Withdraw**   | Withdraw SOL from deactivated stake | Todo   |
+| **Deactivate** | Begin stake cooldown                | Done   |
+| **Withdraw**   | Withdraw SOL from deactivated stake | Done   |
 | **Merge**      | Combine two stake accounts          | Todo   |
 | **Split**      | Split stake into multiple accounts  | Todo   |
 | **Show**       | Display stake account details       | Todo   |
@@ -137,18 +137,19 @@ For validators managing vote accounts.
 
 | Command                 | What it does                  | Status |
 | ----------------------- | ----------------------------- | ------ |
-| **Create Vote Account** | Initialize a new vote account | Todo   |
-| **Authorize Voter**     | Change authorized voter       | Todo   |
-| **Withdraw from Vote**  | Withdraw from vote account    | Todo   |
-| **Show Vote Account**   | Display vote account info     | Todo   |
+| **Create Vote Account** | Initialize a new vote account | Done   |
+| **Authorize Voter**     | Change authorized voter       | Done   |
+| **Withdraw from Vote**  | Withdraw from vote account    | Done   |
+| **Show Vote Account**   | Display vote account info     | Done   |
 
 ---
 
 ## **ScillaConfig**
 
 Manage Scilla's configuration settings.
-| Command          | What it does                      | Status |
-| ---------------- | --------------------------------- | ------ |
-| **Generate ScillaConfig** | Create or overwrite config file   | Done   |
-| **Edit ScillaConfig**| Open config file in default editor | Done   |
-| **Show ScillaConfig**| Display current config settings    | Done   |
+
+| Command                   | What it does                       | Status |
+| ------------------------- | ---------------------------------- | ------ |
+| **Generate ScillaConfig** | Create or overwrite config file    | Done   |
+| **Edit ScillaConfig**     | Open config file in default editor | Done   |
+| **Show ScillaConfig**     | Display current config settings    | Done   |
