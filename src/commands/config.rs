@@ -49,7 +49,7 @@ enum ConfigField {
     RpcUrl,
     CommitmentLevel,
     KeypairPath,
-    None, // if None is chosen , we go back to previous context 
+    None, // if None is chosen , we go back to previous context
 }
 
 impl fmt::Display for ConfigField {
@@ -58,7 +58,7 @@ impl fmt::Display for ConfigField {
             ConfigField::RpcUrl => write!(f, "RPC URL"),
             ConfigField::CommitmentLevel => write!(f, "Commitment Level"),
             ConfigField::KeypairPath => write!(f, "Keypair Path"),
-            ConfigField::GoBack => write!(f, "Go back"),
+            ConfigField::None => write!(f, "None"),
         }
     }
 }
@@ -283,7 +283,7 @@ async fn edit_config() -> anyhow::Result<()> {
                 break;
             }
         }
-        ConfigField::GoBack => {
+        ConfigField::None => {
             return Ok(());
         }
     }
