@@ -129,7 +129,8 @@ pub async fn fetch_account_with_epoch(
     )
 }
 
-/// Generic helper to deserialize bincode data with consistent error context.
+/// Generic helper to deserialize bincode data with consistent error
+/// context
 pub fn bincode_deserialize<T>(data: &[u8], ctx: &str) -> anyhow::Result<T>
 where
     T: serde::de::DeserializeOwned,
@@ -137,7 +138,8 @@ where
     bincode::deserialize::<T>(data).with_context(|| format!("Failed to deserialize {}", ctx))
 }
 
-/// Generic helper to deserialize bincode data with limit and proper error context
+/// Generic helper to deserialize bincode data with limit and proper error
+/// context
 pub fn bincode_deserialize_with_limit<T>(limit: u64, data: &[u8], ctx: &str) -> anyhow::Result<T>
 where
     T: serde::de::DeserializeOwned,
