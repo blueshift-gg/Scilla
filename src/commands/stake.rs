@@ -18,6 +18,7 @@ use {
     anyhow::{anyhow, bail},
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
+    solana_clock::Clock,
     solana_keypair::Signer,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::{
@@ -88,7 +89,7 @@ impl StakeCommand {
             StakeCommand::Create => {
                 let stake_account_keypair_path: PathBuf =
                     prompt_data("Enter Stake Account Keypair: ")?;
-                let amount_to_stake: SolAmount = prompt_data("Enter amount to stake (in SOL):")?;
+                let amount_sol: SolAmount = prompt_data("Enter amount to stake (in SOL):")?;
                 let withdraw_authority_keypair_path: PathBuf =
                     prompt_data("Enter Withdraw Authority Keypair Path: ")?;
 
@@ -97,7 +98,7 @@ impl StakeCommand {
                     process_create_stake_account(
                         ctx,
                         stake_account_keypair_path,
-                        amount_to_stake,
+                        amount_sol,
                         withdraw_authority_keypair_path,
                     ),
                 )
@@ -195,15 +196,14 @@ impl StakeCommand {
 async fn process_create_stake_account(
     ctx: &ScillaContext,
     stake_account_keypair_path: PathBuf,
-    amount_to_stake: SolAmount,
+    amount_sol: SolAmount,
     withdraw_authority_keypair_path: PathBuf,
 ) -> anyhow::Result<()> {
     let stake_account_keypair = read_keypair_from_path(stake_account_keypair_path)?;
-    let stake_account_pubkey = stake_account_keypair.pubkey();
-    let withdraw_authority_keypair = read_keypair_from_path(withdraw_authority_keypair_path)?;
-    let withdraw_authority_pubkey = withdraw_authority_keypair.pubkey();
+    let withdraw_authority_pubkey =
+        read_keypair_from_path(withdraw_authority_keypair_path)?.pubkey();
 
-    let lamports = amount_to_stake.to_lamports();
+    let lamports = amount_sol.to_lamports();
 
     let minimum_rent_for_balance = ctx
         .rpc()
@@ -214,10 +214,10 @@ async fn process_create_stake_account(
     let total_lamports = lamports + minimum_rent_for_balance;
     check_minimum_balance(ctx, ctx.pubkey(), total_lamports).await?;
 
-    if ctx.pubkey() == &stake_account_pubkey {
+    if ctx.pubkey() == &stake_account_keypair.pubkey() {
         (bail!(
             "Stake Account {} cannout be the same as fee payer account {}",
-            stake_account_pubkey,
+            stake_account_keypair.pubkey(),
             ctx.pubkey(),
         ));
     }
@@ -229,7 +229,7 @@ async fn process_create_stake_account(
 
     let ix = instruction::create_account(
         ctx.pubkey(),
-        &stake_account_pubkey,
+        &stake_account_keypair.pubkey(),
         &authorized,
         &Lockup::default(),
         total_lamports,
@@ -239,7 +239,11 @@ async fn process_create_stake_account(
 
     let accounts = ctx
         .rpc()
-        .get_multiple_accounts(&[stake_account_pubkey, stake_history::id(), clock::id()])
+        .get_multiple_accounts(&[
+            stake_account_keypair.pubkey(),
+            stake_history::id(),
+            clock::id(),
+        ])
         .await?;
 
     let Some(Some(stake_account)) = accounts.first() else {
@@ -273,7 +277,7 @@ async fn process_create_stake_account(
         ])
         .add_row(vec![
             Cell::new("Stake Account Pubkey"),
-            Cell::new(stake_account_pubkey),
+            Cell::new(stake_account_keypair.pubkey()),
         ])
         .add_row(vec![
             Cell::new("Delegated Stake"),
