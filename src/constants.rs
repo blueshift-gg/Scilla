@@ -15,3 +15,5 @@ pub const TESTNET_RPC: &str = "https://api.testnet.solana.com";
 pub const DEFAULT_EPOCH_LIMIT: usize = 10;
 
 pub const STAKE_HISTORY_SYSVAR_ADDR: &str = "SysvarStakeHistory1111111111111111111111111";
+
+pub const MEMO_PROGRAM_ID: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";

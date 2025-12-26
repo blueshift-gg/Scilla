@@ -186,7 +186,7 @@ pub fn decode_base58(encoded: &str) -> anyhow::Result<Vec<u8>> {
 mod tests {
 
     use {
-        super::*, solana_rpc_client::nonblocking::rpc_client::RpcClient,
+        super::*, crate::constants::MEMO_PROGRAM_ID, solana_message::VersionedMessage,
         solana_transaction::versioned::VersionedTransaction,
     };
 
@@ -202,44 +202,41 @@ mod tests {
         assert!(result > 0.0, "Should handle u64::MAX without panic");
         assert!(result < f64::INFINITY, "Should not overflow to infinity");
     }
-    #[tokio::test]
-    async fn test_memo_transaction_base64_base58_roundtrip() -> anyhow::Result<()> {
-        let rpc = RpcClient::new("https://api.devnet.solana.com".to_string());
+    #[test]
+    fn test_decode_base64_base58_with_memo_transaction() -> anyhow::Result<()> {
+        use base64::Engine;
 
-        // Memo program ID
-        let memo_program_id = Pubkey::from_str("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")?;
+        // Fixture: Real memo transaction from Solana devnet
+        const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
 
-        let payer =
-            read_keypair_from_path(dirs::home_dir().unwrap().join(".config/solana/id.json"))?;
+        // Base64 encoded VersionedTransaction
+        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
 
-        let memo_ix = Instruction {
-            program_id: memo_program_id,
-            accounts: vec![],
-            data: b"devnet-test".to_vec(),
+        let tx_bytes = base64::engine::general_purpose::STANDARD.decode(BASE64_TX)?;
+        let base58_tx = bs58::encode(&tx_bytes).into_string();
+
+        // Test decode_base64
+        let decoded_b64 = decode_base64(BASE64_TX)?;
+        let tx_from_b64: VersionedTransaction = bincode::deserialize(&decoded_b64)?;
+        assert_eq!(tx_from_b64.signatures[0].to_string(), EXPECTED_SIGNATURE);
+
+        // Test decode_base58
+        let decoded_b58 = decode_base58(&base58_tx)?;
+        let tx_from_b58: VersionedTransaction = bincode::deserialize(&decoded_b58)?;
+        assert_eq!(tx_from_b58.signatures[0].to_string(), EXPECTED_SIGNATURE);
+
+        // Verify it contains memo instruction
+        let VersionedMessage::Legacy(message) = &tx_from_b64.message else {
+            panic!("Expected legacy message format");
         };
 
-        let recent_blockhash = rpc.get_latest_blockhash().await?;
+        let memo_program_pubkey = Pubkey::from_str(MEMO_PROGRAM_ID)?;
+        let has_memo = message
+            .instructions
+            .iter()
+            .any(|ix| message.account_keys[ix.program_id_index as usize] == memo_program_pubkey);
 
-        let message = Message::new(&[memo_ix], Some(&payer.pubkey()));
-        let tx = Transaction::new(&[&payer], message, recent_blockhash);
-
-        let signature = rpc.send_and_confirm_transaction(&tx).await?;
-
-        let versioned_tx = VersionedTransaction::from(tx);
-
-        let raw = bincode::serialize(&versioned_tx)?;
-
-        let encoded_b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
-        let encoded_b58 = bs58::encode(&raw).into_string();
-
-        let decoded_b64 = decode_base64(&encoded_b64)?;
-        let decoded_b58 = decode_base58(&encoded_b58)?;
-
-        let tx_b64: VersionedTransaction = bincode::deserialize(&decoded_b64)?;
-        let tx_b58: VersionedTransaction = bincode::deserialize(&decoded_b58)?;
-
-        assert_eq!(tx_b64.signatures[0], signature);
-        assert_eq!(tx_b58.signatures[0], signature);
+        assert!(has_memo, "Transaction should contain memo instruction");
 
         Ok(())
     }
