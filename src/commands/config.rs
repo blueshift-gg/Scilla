@@ -77,26 +77,26 @@ impl ConfigField {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum CommitmentOptions {
+pub enum UICommitmentOptions {
     Level(CommitmentLevel),
     None,
 }
 
-impl fmt::Display for CommitmentOptions {
+impl fmt::Display for UICommitmentOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CommitmentOptions::Level(level) => write!(f, "{:?}", level),
-            CommitmentOptions::None => write!(f, "None"),
+            UICommitmentOptions::Level(level) => write!(f, "{:?}", level),
+            UICommitmentOptions::None => write!(f, "None"),
         }
     }
 }
 
-fn get_commitment_levels() -> Vec<CommitmentOptions> {
+fn get_commitment_levels() -> Vec<UICommitmentOptions> {
     vec![
-        CommitmentOptions::Level(CommitmentLevel::Processed),
-        CommitmentOptions::Level(CommitmentLevel::Confirmed),
-        CommitmentOptions::Level(CommitmentLevel::Finalized),
-        CommitmentOptions::None,
+        UICommitmentOptions::Level(CommitmentLevel::Processed),
+        UICommitmentOptions::Level(CommitmentLevel::Confirmed),
+        UICommitmentOptions::Level(CommitmentLevel::Finalized),
+        UICommitmentOptions::None,
     ]
 }
 
@@ -185,8 +185,8 @@ pub async fn generate_config() -> anyhow::Result<()> {
 
         let commitment_level =
             match Select::new("Select commitment level:", get_commitment_levels()).prompt()? {
-                CommitmentOptions::Level(level) => level,
-                CommitmentOptions::None => {
+                UICommitmentOptions::Level(level) => level,
+                UICommitmentOptions::None => {
                     return Ok(());
                 }
             };
@@ -273,14 +273,15 @@ async fn edit_config() -> anyhow::Result<()> {
             config.rpc_url = prompt_data("Enter RPC URL:")?;
         }
         ConfigField::CommitmentLevel => {
-            match Select::new("Select Commitment Level", get_commitment_levels()).prompt()? {
-                CommitmentOptions::Level(level) => {
-                    config.commitment_level = level;
-                }
-                CommitmentOptions::None => {
-                    return Ok(());
-                }
+            let selected =
+                Select::new("Select Commitment Level", get_commitment_levels()).prompt()?;
+
+            let level = match selected {
+                UICommitmentOptions::Level(level) => level,
+                UICommitmentOptions::None => return Ok(()),
             };
+
+            config.commitment_level = level
         }
         ConfigField::KeypairPath => {
             let default_keypair_path = ScillaConfig::default().keypair_path;
