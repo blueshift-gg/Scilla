@@ -2087,6 +2087,7 @@ dependencies = [
  "solana-pubkey 3.0.0",
  "solana-rpc-client",
  "solana-rpc-client-api",
+ "solana-sdk-ids",
  "solana-signature",
  "solana-stake-interface",
  "solana-transaction",
