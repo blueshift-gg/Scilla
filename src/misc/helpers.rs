@@ -1,8 +1,8 @@
 use {
     crate::{ScillaContext, constants::LAMPORTS_PER_SOL},
     anyhow::{Context, anyhow, bail},
-    bincode::Options,
     base64::Engine,
+    bincode::Options,
     solana_account::Account,
     solana_epoch_info::EpochInfo,
     solana_instruction::Instruction,
@@ -184,7 +184,6 @@ pub fn decode_base58(encoded: &str) -> anyhow::Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-
     use {
         super::*, crate::constants::MEMO_PROGRAM_ID, solana_message::VersionedMessage,
         solana_transaction::versioned::VersionedTransaction,
