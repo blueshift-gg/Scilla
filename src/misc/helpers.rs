@@ -1,6 +1,8 @@
 use {
     crate::{constants::LAMPORTS_PER_SOL, ScillaContext},
-    anyhow::{anyhow, bail},
+    anyhow::{anyhow, bail, Context},
+    base64::Engine,
+    bincode::Options,
     solana_account::Account,
     solana_epoch_info::EpochInfo,
     solana_instruction::Instruction,
@@ -128,9 +130,64 @@ pub async fn fetch_account_with_epoch(
     )
 }
 
+/// Generic helper to deserialize bincode data with consistent error
+/// context
+pub fn bincode_deserialize<T>(data: &[u8], ctx: &str) -> anyhow::Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    bincode::deserialize::<T>(data).with_context(|| format!("Failed to deserialize {}", ctx))
+}
+
+/// Generic helper to deserialize bincode data with limit and proper error
+/// context
+pub fn bincode_deserialize_with_limit<T>(limit: u64, data: &[u8], ctx: &str) -> anyhow::Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    bincode::options()
+        .with_fixint_encoding()
+        .with_limit(limit)
+        .deserialize::<T>(data)
+        .with_context(|| format!("Failed to deserialize {}", ctx))
+}
+
+pub fn decode_base64(encoded: &str) -> anyhow::Result<Vec<u8>> {
+    let trimmed = encoded.trim();
+    if trimmed.is_empty() {
+        bail!("Encoded data cannot be empty");
+    }
+
+    base64::engine::general_purpose::STANDARD
+        .decode(trimmed)
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to decode Base64: {}. Please ensure the data is valid Base64 encoded.",
+                e
+            )
+        })
+}
+
+pub fn decode_base58(encoded: &str) -> anyhow::Result<Vec<u8>> {
+    let trimmed = encoded.trim();
+    if trimmed.is_empty() {
+        bail!("Encoded data cannot be empty");
+    }
+
+    bs58::decode(trimmed).into_vec().map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to decode Base58: {}. Please ensure the data is valid Base58 encoded.",
+            e
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {
+        super::*, crate::constants::MEMO_PROGRAM_ID, solana_message::VersionedMessage,
+        solana_transaction::versioned::VersionedTransaction,
+    };
 
     #[test]
     fn test_lamports_to_sol_exact_one_sol() {
@@ -143,5 +200,59 @@ mod tests {
         let result = lamports_to_sol(u64::MAX);
         assert!(result > 0.0, "Should handle u64::MAX without panic");
         assert!(result < f64::INFINITY, "Should not overflow to infinity");
+    }
+    #[test]
+    fn test_decode_base64_memo_transaction() -> anyhow::Result<()> {
+        // Fixture: Real memo transaction from Solana devnet
+        const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
+        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
+
+        let decoded = decode_base64(BASE64_TX)?;
+        let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
+
+        assert_eq!(tx.signatures[0].to_string(), EXPECTED_SIGNATURE);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_base58_memo_transaction() -> anyhow::Result<()> {
+        // Fixture: Real memo transaction from Solana devnet
+        const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
+        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
+
+        // Derive Base58 from Base64
+        let tx_bytes = base64::engine::general_purpose::STANDARD.decode(BASE64_TX)?;
+        let base58_tx = bs58::encode(&tx_bytes).into_string();
+
+        let decoded = decode_base58(&base58_tx)?;
+        let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
+
+        assert_eq!(tx.signatures[0].to_string(), EXPECTED_SIGNATURE);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_memo_transaction_contains_memo_instruction() -> anyhow::Result<()> {
+        // Fixture: Real memo transaction from Solana devnet
+        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
+
+        let decoded = decode_base64(BASE64_TX)?;
+        let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
+
+        let VersionedMessage::Legacy(message) = &tx.message else {
+            panic!("Expected legacy message format");
+        };
+
+        let memo_program_pubkey = Pubkey::from_str(MEMO_PROGRAM_ID)?;
+        let has_memo = message
+            .instructions
+            .iter()
+            .any(|ix| message.account_keys[ix.program_id_index as usize] == memo_program_pubkey);
+
+        assert!(has_memo, "Transaction should contain memo instruction");
+
+        Ok(())
     }
 }

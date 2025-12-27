@@ -1,7 +1,8 @@
 use {
     crate::commands::{
         account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
-        stake::StakeCommand, vote::VoteCommand, Command, CommandGroup,
+        stake::StakeCommand, transaction::TransactionCommand, vote::VoteCommand, Command,
+        CommandGroup,
     },
     inquire::{Select, Text},
     std::str::FromStr,
@@ -14,6 +15,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
             CommandGroup::Cluster,
             CommandGroup::Stake,
             CommandGroup::Vote,
+            CommandGroup::Transaction,
             CommandGroup::ScillaConfig,
             CommandGroup::Exit,
         ],
@@ -26,6 +28,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
         CommandGroup::Account => Command::Account(prompt_account()?),
         CommandGroup::Vote => Command::Vote(prompt_vote()?),
         CommandGroup::ScillaConfig => Command::ScillaConfig(prompt_config()?),
+        CommandGroup::Transaction => Command::Transaction(prompt_transaction()?),
         CommandGroup::Exit => Command::Exit,
     };
 
@@ -80,7 +83,6 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
             AccountCommand::Balance,
             AccountCommand::Transfer,
             AccountCommand::Airdrop,
-            AccountCommand::CheckTransactionConfirmation,
             AccountCommand::LargestAccounts,
             AccountCommand::NonceAccount,
             AccountCommand::GoBack,
@@ -101,6 +103,21 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
             VoteCommand::ShowVoteAccount,
             VoteCommand::CloseVoteAccount,
             VoteCommand::GoBack,
+        ],
+    )
+    .prompt()?;
+
+    Ok(choice)
+}
+
+fn prompt_transaction() -> anyhow::Result<TransactionCommand> {
+    let choice = Select::new(
+        "Transaction Command:",
+        vec![
+            TransactionCommand::CheckConfirmation,
+            TransactionCommand::FetchStatus,
+            TransactionCommand::FetchTransaction,
+            TransactionCommand::SendTransaction,
         ],
     )
     .prompt()?;

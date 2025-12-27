@@ -2,7 +2,7 @@ use {
     crate::{
         commands::{
             account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
-            stake::StakeCommand, vote::VoteCommand,
+            stake::StakeCommand, transaction::TransactionCommand, vote::VoteCommand,
         },
         context::ScillaContext,
         error::ScillaResult,
@@ -18,6 +18,7 @@ pub mod account;
 pub mod cluster;
 pub mod config;
 pub mod stake;
+pub mod transaction;
 pub mod vote;
 
 pub enum CommandExec<T> {
@@ -39,6 +40,7 @@ pub enum Command {
     Stake(StakeCommand),
     Account(AccountCommand),
     Vote(VoteCommand),
+    Transaction(TransactionCommand),
     ScillaConfig(ConfigCommand),
     Exit,
 }
@@ -50,6 +52,9 @@ impl Command {
             Command::Stake(stake_command) => stake_command.process_command(ctx).await,
             Command::Account(account_command) => account_command.process_command(ctx).await,
             Command::Vote(vote_command) => vote_command.process_command(ctx).await,
+            Command::Transaction(transaction_command) => {
+                transaction_command.process_command(ctx).await
+            }
             Command::ScillaConfig(config_command) => config_command.process_command().await,
             Command::Exit => Ok(CommandExec::Exit),
         }
@@ -62,6 +67,7 @@ pub enum CommandGroup {
     Cluster,
     Stake,
     Vote,
+    Transaction,
     ScillaConfig,
     Exit,
 }
@@ -73,6 +79,7 @@ impl fmt::Display for CommandGroup {
             CommandGroup::Cluster => "Cluster",
             CommandGroup::Stake => "Stake",
             CommandGroup::Vote => "Vote",
+            CommandGroup::Transaction => "Transaction",
             CommandGroup::ScillaConfig => "ScillaConfig",
             CommandGroup::Exit => "Exit",
         };

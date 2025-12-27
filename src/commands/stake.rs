@@ -5,24 +5,25 @@ use {
         context::ScillaContext,
         error::ScillaResult,
         misc::helpers::{
-            build_and_send_tx, fetch_account_with_epoch, lamports_to_sol, sol_to_lamports,
+            bincode_deserialize, bincode_deserialize_with_limit, build_and_send_tx,
+            fetch_account_with_epoch, lamports_to_sol, read_keypair_from_path, sol_to_lamports,
             SolAmount,
         },
         prompt::prompt_data,
         ui::show_spinner,
     },
     anyhow::bail,
-    bincode::Options,
     comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
+    solana_keypair::Signer,
     solana_pubkey::Pubkey,
     solana_stake_interface::{
-        instruction::{deactivate_stake, withdraw},
+        instruction::{self, deactivate_stake, merge, withdraw},
         program::id as stake_program_id,
         stake_history::{StakeHistory, StakeHistoryEntry},
         state::StakeStateV2,
     },
-    std::fmt,
+    std::{fmt, path::PathBuf},
 };
 
 /// Commands related to staking operations
@@ -98,8 +99,45 @@ impl StakeCommand {
                 )
                 .await?;
             }
-            StakeCommand::Merge => todo!(),
-            StakeCommand::Split => todo!(),
+            StakeCommand::Merge => {
+                let destination_stake_account_pubkey: Pubkey =
+                    prompt_data("Enter Stake Account Pubkey: ")?;
+                let source_stake_account_pubkey: Pubkey =
+                    prompt_data("Enter Source Stake Account Pubkey: ")?;
+                let stake_authority_keypair_path: PathBuf =
+                    prompt_data("Enter Stake Authority Keypair Path: ")?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_merge_stake(
+                        ctx,
+                        &destination_stake_account_pubkey,
+                        &source_stake_account_pubkey,
+                        &stake_authority_keypair_path,
+                    ),
+                )
+                .await?;
+            }
+            StakeCommand::Split => {
+                let stake_account_pubkey: Pubkey = prompt_data("Enter Stake Account Pubkey: ")?;
+                let split_stake_account_pubkey: Pubkey =
+                    prompt_data("Enter Split Stake Account Pubkey: ")?;
+                let stake_authority_keypair_path: PathBuf =
+                    prompt_data("Enter Stake Authority Keypair Path: ")?;
+                let amount_to_split: f64 = prompt_data("Enter Stake Amount (SOL) to Split: ")?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_split_stake(
+                        ctx,
+                        &stake_account_pubkey,
+                        &split_stake_account_pubkey,
+                        &stake_authority_keypair_path,
+                        amount_to_split,
+                    ),
+                )
+                .await?;
+            }
             StakeCommand::Show => todo!(),
             StakeCommand::History => {
                 show_spinner(self.spinner_msg(), process_stake_history(ctx)).await?;
@@ -122,8 +160,7 @@ async fn process_deactivate_stake_account(
         bail!("Account is not owned by the stake program");
     }
 
-    let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {e}"))?;
+    let stake_state: StakeStateV2 = bincode_deserialize(&account.data, "stake account data")?;
 
     match stake_state {
         StakeStateV2::Stake(meta, stake, _) => {
@@ -179,8 +216,7 @@ async fn process_withdraw_stake(
         bail!("Account is not owned by the stake program");
     }
 
-    let stake_state: StakeStateV2 = bincode::deserialize(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake account: {e}"))?;
+    let stake_state: StakeStateV2 = bincode_deserialize(&account.data, "stake account data")?;
 
     match stake_state {
         StakeStateV2::Stake(meta, stake, _) => {
@@ -257,16 +293,194 @@ async fn process_withdraw_stake(
     Ok(())
 }
 
+async fn process_merge_stake(
+    ctx: &ScillaContext,
+    destination_stake_account_pubkey: &Pubkey,
+    source_stake_account_pubkey: &Pubkey,
+    stake_authority_keypair_path: &PathBuf,
+) -> anyhow::Result<()> {
+    let stake_authority_keypair = read_keypair_from_path(stake_authority_keypair_path)?;
+
+    // checks for unique pubkeys
+    if destination_stake_account_pubkey == source_stake_account_pubkey {
+        bail!(
+            "Destination Stake Account {} & Source Stake Account {} must not be the same",
+            destination_stake_account_pubkey,
+            source_stake_account_pubkey
+        );
+    }
+
+    let stake_accounts = ctx
+        .rpc()
+        .get_multiple_accounts(&[
+            *destination_stake_account_pubkey,
+            *source_stake_account_pubkey,
+        ])
+        .await?;
+
+    let Some(destination_stake_account) = stake_accounts[0].as_ref() else {
+        bail!("Failed to get stake account");
+    };
+
+    let Some(source_stake_account) = stake_accounts[1].as_ref() else {
+        bail!("Failed to get stake account");
+    };
+
+    let destination_stake_state: StakeStateV2 = bincode_deserialize(
+        &destination_stake_account.data,
+        "destination stake account data",
+    )?;
+
+    let source_stake_state: StakeStateV2 =
+        bincode_deserialize(&source_stake_account.data, "source stake account data")?;
+
+    match &destination_stake_state {
+        StakeStateV2::Initialized(meta) => {
+            // Initialized destination is valid
+            (meta, None)
+        }
+        StakeStateV2::Stake(meta, stake, _) => {
+            // Delegated destination is valid
+            (meta, Some(&stake.delegation))
+        }
+        _ => bail!("Destination stake account is not in a valid state"),
+    };
+
+    match &source_stake_state {
+        StakeStateV2::Initialized(meta) => {
+            // CHECK: Verify authority for initialized source
+            if meta.authorized.staker != stake_authority_keypair.pubkey() {
+                bail!(
+                    "Provided keypair is not the stake authority for source account\nExpected: \
+                     {}\nProvided: {}",
+                    meta.authorized.staker,
+                    stake_authority_keypair.pubkey()
+                );
+            }
+
+            (meta, None)
+        }
+        StakeStateV2::Stake(meta, stake, _) => {
+            // CHECK: Verify authority for delegated source
+            if meta.authorized.staker != stake_authority_keypair.pubkey() {
+                bail!(
+                    "Provided keypair is not the stake authority for source account\nExpected: \
+                     {}\nProvided: {}",
+                    meta.authorized.staker,
+                    stake_authority_keypair.pubkey()
+                );
+            }
+
+            // CHECK: Source must not be deactivating
+            if stake.delegation.deactivation_epoch != u64::MAX {
+                bail!(
+                    "Cannot merge: source stake account is deactivating at epoch {}",
+                    stake.delegation.deactivation_epoch
+                );
+            }
+
+            (meta, Some(&stake.delegation))
+        }
+        _ => bail!("Source stake account is not in a valid state"),
+    };
+
+    let stake_authority_pubkey = stake_authority_keypair.pubkey();
+
+    let ixs = merge(
+        destination_stake_account_pubkey,
+        source_stake_account_pubkey,
+        &stake_authority_pubkey,
+    );
+
+    let signature =
+        build_and_send_tx(ctx, &ixs, &[ctx.keypair(), &stake_authority_keypair]).await?;
+
+    println!(
+        "{}\n{}\n{}\n{}\n{}\n{}",
+        style("Stake Merged successfully!").yellow().bold(),
+        style(format!(
+            "Destination Stake Account: {}",
+            destination_stake_account_pubkey
+        ))
+        .yellow(),
+        style(format!(
+            "Source Stake Account: {}",
+            source_stake_account_pubkey
+        ))
+        .yellow(),
+        style(format!("Stake Authority: {}", stake_authority_pubkey)).yellow(),
+        style(format!(
+            "After Merge: {} SOL",
+            lamports_to_sol(destination_stake_account.lamports)
+        ))
+        .cyan(),
+        style(format!("Signature: {}", signature)).green()
+    );
+
+    Ok(())
+}
+
+async fn process_split_stake(
+    ctx: &ScillaContext,
+    stake_account_pubkey: &Pubkey,
+    split_stake_account_pubkey: &Pubkey,
+    stake_authority_keypair_path: &PathBuf,
+    amount_to_split: f64,
+) -> anyhow::Result<()> {
+    let stake_authority_keypair = read_keypair_from_path(stake_authority_keypair_path)?;
+    let stake_authority_pubkey = stake_authority_keypair.pubkey();
+    let lamports: u64 = sol_to_lamports(amount_to_split);
+
+    if stake_account_pubkey == split_stake_account_pubkey {
+        bail!(
+            "Existing Stake Account {} and New Split Stake Account {} must not be the same",
+            stake_account_pubkey,
+            split_stake_account_pubkey
+        );
+    }
+
+    let stake_minimum_delegation = ctx.rpc().get_stake_minimum_delegation().await?;
+
+    if lamports < stake_minimum_delegation {
+        bail!(
+            "Need at least {} lamports for minimum stake delegation, but you provided {}",
+            stake_minimum_delegation,
+            lamports
+        );
+    }
+
+    let ix = instruction::split(
+        stake_account_pubkey,
+        &stake_authority_pubkey,
+        lamports,
+        split_stake_account_pubkey,
+    );
+
+    let signature = build_and_send_tx(ctx, &ix, &[ctx.keypair(), &stake_authority_keypair]).await?;
+
+    println!(
+        "{}\n{}\n{}\n{}\n{}",
+        style("Split Stake successfully!").yellow().bold(),
+        style(format!("Stake Account: {}", stake_account_pubkey)).yellow(),
+        style(format!(
+            "Split Stake Account: {}",
+            split_stake_account_pubkey
+        ))
+        .yellow(),
+        style(format!("Stake Authority: {}", stake_authority_pubkey)).yellow(),
+        style(format!("Signature: {}", signature)).green()
+    );
+
+    Ok(())
+}
+
 async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
     let stake_history_sysvar = Pubkey::from_str_const(STAKE_HISTORY_SYSVAR_ADDR);
 
     let account = ctx.rpc().get_account(&stake_history_sysvar).await?;
 
-    let stake_history: StakeHistory = bincode::options()
-        .with_fixint_encoding()
-        .with_limit(account.data.len() as u64)
-        .deserialize(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize StakeHistory: {}", e))?;
+    let stake_history: StakeHistory =
+        bincode_deserialize_with_limit(account.data.len() as u64, &account.data, "stake history")?;
 
     if stake_history.is_empty() {
         println!("\n{}", style("No stake history available").yellow());

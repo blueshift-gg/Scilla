@@ -38,6 +38,11 @@ solana-commitment-config = "3"
 solana-pubkey = "3"
 solana-signature = "3"
 solana-nonce = "3"
+solana-sdk-ids = "3"
+base64 = "0.22.1"
+bs58 = "0.5.1"
+solana-transaction-status = "3.1.4"
+
 
 
 [dev-dependencies]

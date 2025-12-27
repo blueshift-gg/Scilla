@@ -3,7 +3,7 @@ use {
         commands::CommandExec,
         context::ScillaContext,
         error::ScillaResult,
-        misc::helpers::{build_and_send_tx, lamports_to_sol, sol_to_lamports},
+        misc::helpers::{bincode_deserialize, build_and_send_tx, lamports_to_sol, sol_to_lamports},
         prompt::prompt_data,
         ui::{print_error, show_spinner},
     },
@@ -14,7 +14,6 @@ use {
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
-    solana_signature::Signature,
     solana_system_interface::instruction::transfer,
     std::fmt,
 };
@@ -26,7 +25,6 @@ pub enum AccountCommand {
     Balance,
     Transfer,
     Airdrop,
-    CheckTransactionConfirmation,
     LargestAccounts,
     NonceAccount,
     GoBack,
@@ -39,7 +37,6 @@ impl AccountCommand {
             AccountCommand::Balance => "Checking SOL balance…",
             AccountCommand::Transfer => "Sending SOL…",
             AccountCommand::Airdrop => "Requesting SOL on devnet/testnet…",
-            AccountCommand::CheckTransactionConfirmation => "Checking transaction confirmation…",
             AccountCommand::LargestAccounts => "Fetching largest accounts on the cluster…",
             AccountCommand::NonceAccount => "Inspecting or managing durable nonces…",
             AccountCommand::GoBack => "Going back…",
@@ -54,7 +51,6 @@ impl fmt::Display for AccountCommand {
             AccountCommand::Balance => "Check balance",
             AccountCommand::Transfer => "Transfer SOL",
             AccountCommand::Airdrop => "Request airdrop",
-            AccountCommand::CheckTransactionConfirmation => "Check transaction confirmation",
             AccountCommand::LargestAccounts => "View largest accounts",
             AccountCommand::NonceAccount => "View nonce account",
             AccountCommand::GoBack => "Go back",
@@ -85,10 +81,6 @@ impl AccountCommand {
             }
             AccountCommand::Airdrop => {
                 show_spinner(self.spinner_msg(), request_sol_airdrop(ctx)).await?;
-            }
-            AccountCommand::CheckTransactionConfirmation => {
-                let signature: Signature = prompt_data("Enter transaction signature:")?;
-                show_spinner(self.spinner_msg(), confirm_transaction(ctx, &signature)).await?;
             }
             AccountCommand::LargestAccounts => {
                 show_spinner(self.spinner_msg(), fetch_largest_accounts(ctx)).await?;
@@ -173,42 +165,6 @@ async fn fetch_account_balance(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::
     Ok(())
 }
 
-async fn confirm_transaction(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
-    let confirmed = ctx.rpc().confirm_transaction(signature).await?;
-
-    let status = if confirmed {
-        "Confirmed"
-    } else {
-        "Not Confirmed"
-    };
-    let status_color = if confirmed {
-        style(status).green()
-    } else {
-        style(status).yellow()
-    };
-
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![
-            Cell::new("Signature"),
-            Cell::new(signature.to_string()),
-        ])
-        .add_row(vec![
-            Cell::new("Status"),
-            Cell::new(status_color.to_string()),
-        ]);
-
-    println!("\n{}", style("TRANSACTION CONFIRMATION").green().bold());
-    println!("{table}");
-
-    Ok(())
-}
-
 async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
     let filter_choice = Select::new(
         "Filter accounts by:",
@@ -256,8 +212,7 @@ async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
 async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<()> {
     let account = ctx.rpc().get_account(pubkey).await?;
 
-    let versions = bincode::deserialize::<Versions>(&account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize nonce account data: {e}"))?;
+    let versions = bincode_deserialize::<Versions>(&account.data, "nonce account data")?;
 
     let solana_nonce::state::State::Initialized(data) = versions.state() else {
         bail!("This account is not an initialized nonce account");
