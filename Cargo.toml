@@ -32,17 +32,17 @@ solana-account = "3"
 solana-epoch-info = "3"
 solana-rpc-client = "3"
 solana-rpc-client-api = "3"
+solana-sdk-ids = "3"
+solana-clock = "3"
+solana-sysvar = "3"
 solana-keypair = "3"
 solana-commitment-config = "3"
 solana-pubkey = "3"
 solana-signature = "3"
 solana-nonce = "3"
-solana-sdk-ids = "3"
 base64 = "0.22.1"
 bs58 = "0.5.1"
 solana-transaction-status = "3.1.4"
-
-
 
 [dev-dependencies]
 tempfile = "3.8"

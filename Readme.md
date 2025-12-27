@@ -120,8 +120,8 @@ Full stake account lifecycle management.
 
 | Command        | What it does                        | Status |
 | -------------- | ----------------------------------- | ------ |
-| **Create**     | Create a new stake account          | Todo   |
-| **Delegate**   | Delegate stake to a validator       | Todo   |
+| **Create**     | Create a new stake account          | Done   |
+| **Delegate**   | Delegate stake to a validator       | Done   |
 | **Deactivate** | Begin stake cooldown                | Done   |
 | **Withdraw**   | Withdraw SOL from deactivated stake | Done   |
 | **Merge**      | Combine two stake accounts          | Todo   |

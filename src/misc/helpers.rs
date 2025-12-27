@@ -80,6 +80,25 @@ impl FromStr for SolAmount {
     }
 }
 
+pub async fn check_minimum_balance(
+    ctx: &ScillaContext,
+    payer: &Pubkey,
+    required_lamports: u64,
+) -> anyhow::Result<()> {
+    let payer_balance = ctx.rpc().get_balance(payer).await?;
+
+    if payer_balance < required_lamports {
+        bail!(
+            "Insufficient balance\nRequired: {} SOL\nAvailable: {} SOL\nShort: {} SOL",
+            required_lamports as f64 / 1e9,
+            payer_balance as f64 / 1e9,
+            (required_lamports - payer_balance) as f64 / 1e9
+        );
+    }
+
+    Ok(())
+}
+
 pub fn sol_to_lamports(sol: f64) -> u64 {
     (sol * LAMPORTS_PER_SOL as f64) as u64
 }
