@@ -1,5 +1,5 @@
 use {
-    crate::{ScillaContext, constants::LAMPORTS_PER_SOL},
+    crate::{constants::LAMPORTS_PER_SOL, ScillaContext},
     anyhow::{anyhow, bail},
     solana_account::Account,
     solana_epoch_info::EpochInfo,

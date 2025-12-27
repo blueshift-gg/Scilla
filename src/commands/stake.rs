@@ -5,15 +5,15 @@ use {
         context::ScillaContext,
         error::ScillaResult,
         misc::helpers::{
-            SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
-            sol_to_lamports,
+            build_and_send_tx, fetch_account_with_epoch, lamports_to_sol, sol_to_lamports,
+            SolAmount,
         },
         prompt::prompt_data,
         ui::show_spinner,
     },
     anyhow::bail,
     bincode::Options,
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
     solana_pubkey::Pubkey,
     solana_stake_interface::{
