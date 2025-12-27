@@ -7,7 +7,7 @@ use {
         prompt::prompt_data,
         ui::show_spinner,
     },
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
     inquire::Select,
     solana_rpc_client_api::config::RpcTransactionConfig,

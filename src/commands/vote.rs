@@ -1,22 +1,22 @@
 use {
     crate::{
-        ScillaContext, ScillaResult,
         commands::CommandExec,
         misc::helpers::{
-            Commission, SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
-            read_keypair_from_path,
+            build_and_send_tx, fetch_account_with_epoch, lamports_to_sol, read_keypair_from_path,
+            Commission, SolAmount,
         },
         prompt::prompt_data,
         ui::show_spinner,
+        ScillaContext, ScillaResult,
     },
     anyhow::{anyhow, bail},
-    comfy_table::{Cell, Table, presets::UTF8_FULL},
+    comfy_table::{presets::UTF8_FULL, Cell, Table},
     console::style,
     solana_keypair::{Keypair, Signer},
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::RpcGetVoteAccountsConfig,
     solana_vote_program::{
-        vote_instruction::{self, CreateVoteAccountConfig, withdraw},
+        vote_instruction::{self, withdraw, CreateVoteAccountConfig},
         vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
     },
     std::{fmt, path::PathBuf},

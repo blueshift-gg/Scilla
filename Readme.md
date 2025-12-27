@@ -78,7 +78,7 @@ Manage wallets and on-chain accounts.
 | ----------------------- | ------------------------------------ | ------ |
 | **Fetch Account**       | Fetch Account                        | Done   |
 | **Balance**             | Check SOL balance                    | Done   |
-| **Transfer**            | Send SOL to another wallet           | Todo   |
+| **Transfer**            | Send SOL to another wallet           | Done   |
 | **Airdrop**             | Request devnet/testnet SOL           | Done   |
 | **Check Transaction Confirmation** | Check if a transaction landed        | Done   |
 | **Largest Accounts**    | See the biggest accounts on cluster  | Done   |
