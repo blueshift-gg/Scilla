@@ -202,30 +202,46 @@ mod tests {
         assert!(result < f64::INFINITY, "Should not overflow to infinity");
     }
     #[test]
-    fn test_decode_base64_base58_with_memo_transaction() -> anyhow::Result<()> {
-        use base64::Engine;
-
+    fn test_decode_base64_memo_transaction() -> anyhow::Result<()> {
         // Fixture: Real memo transaction from Solana devnet
         const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
-
-        // Base64 encoded VersionedTransaction
         const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
 
+        let decoded = decode_base64(BASE64_TX)?;
+        let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
+
+        assert_eq!(tx.signatures[0].to_string(), EXPECTED_SIGNATURE);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_base58_memo_transaction() -> anyhow::Result<()> {
+        // Fixture: Real memo transaction from Solana devnet
+        const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
+        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
+
+        // Derive Base58 from Base64
         let tx_bytes = base64::engine::general_purpose::STANDARD.decode(BASE64_TX)?;
         let base58_tx = bs58::encode(&tx_bytes).into_string();
 
-        // Test decode_base64
-        let decoded_b64 = decode_base64(BASE64_TX)?;
-        let tx_from_b64: VersionedTransaction = bincode::deserialize(&decoded_b64)?;
-        assert_eq!(tx_from_b64.signatures[0].to_string(), EXPECTED_SIGNATURE);
+        let decoded = decode_base58(&base58_tx)?;
+        let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
 
-        // Test decode_base58
-        let decoded_b58 = decode_base58(&base58_tx)?;
-        let tx_from_b58: VersionedTransaction = bincode::deserialize(&decoded_b58)?;
-        assert_eq!(tx_from_b58.signatures[0].to_string(), EXPECTED_SIGNATURE);
+        assert_eq!(tx.signatures[0].to_string(), EXPECTED_SIGNATURE);
 
-        // Verify it contains memo instruction
-        let VersionedMessage::Legacy(message) = &tx_from_b64.message else {
+        Ok(())
+    }
+
+    #[test]
+    fn test_memo_transaction_contains_memo_instruction() -> anyhow::Result<()> {
+        // Fixture: Real memo transaction from Solana devnet
+        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
+
+        let decoded = decode_base64(BASE64_TX)?;
+        let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
+
+        let VersionedMessage::Legacy(message) = &tx.message else {
             panic!("Expected legacy message format");
         };
 

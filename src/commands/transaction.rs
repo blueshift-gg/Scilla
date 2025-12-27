@@ -3,7 +3,7 @@ use {
         commands::CommandExec,
         context::ScillaContext,
         error::ScillaResult,
-        misc::helpers::{decode_base58, decode_base64},
+        misc::helpers::{bincode_deserialize, decode_base58, decode_base64},
         prompt::prompt_data,
         ui::show_spinner,
     },
@@ -323,8 +323,8 @@ async fn process_send_transaction(
         _ => unreachable!("The available encoding options are Base64 and Base58"),
     };
 
-    let tx: VersionedTransaction = bincode::deserialize(&tx_bytes)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize transaction: {}", e))?;
+    let tx: VersionedTransaction =
+        bincode_deserialize(&tx_bytes, "encoded transaction to VersionedTransaction")?;
 
     let signature = ctx.rpc().send_transaction(&tx).await?;
 
