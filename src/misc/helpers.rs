@@ -1,6 +1,6 @@
 use {
-    crate::{ScillaContext, constants::LAMPORTS_PER_SOL},
-    anyhow::{Context, anyhow, bail},
+    crate::{constants::LAMPORTS_PER_SOL, ScillaContext},
+    anyhow::{anyhow, bail, Context},
     base64::Engine,
     bincode::Options,
     solana_account::Account,
