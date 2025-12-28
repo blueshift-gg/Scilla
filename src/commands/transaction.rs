@@ -23,6 +23,7 @@ pub enum TransactionCommand {
     FetchStatus,
     FetchTransaction,
     SendTransaction,
+    GoBack,
 }
 
 impl TransactionCommand {
@@ -32,6 +33,7 @@ impl TransactionCommand {
             Self::FetchStatus => "Fetching transaction status…",
             Self::FetchTransaction => "Fetching full transaction data…",
             Self::SendTransaction => "Sending transaction…",
+            Self::GoBack => "Going back…",
         }
     }
 }
@@ -43,6 +45,7 @@ impl fmt::Display for TransactionCommand {
             Self::FetchStatus => "Fetch Transaction Status",
             Self::FetchTransaction => "Fetch Transaction",
             Self::SendTransaction => "Send Transaction",
+            Self::GoBack => "Go back",
         })
     }
 }
@@ -96,6 +99,7 @@ impl TransactionCommand {
                 )
                 .await?;
             }
+            TransactionCommand::GoBack => return Ok(CommandExec::GoBack),
         }
 
         Ok(CommandExec::Process(()))
