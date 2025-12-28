@@ -80,16 +80,16 @@ fn get_commitment_levels() -> Vec<CommitmentLevel> {
 }
 
 impl ConfigCommand {
-    pub async fn process_command(&self) -> ScillaResult<()> {
+    pub fn process_command(&self) -> ScillaResult<()> {
         match self {
             ConfigCommand::Show => {
-                show_config().await?;
+                show_config()?;
             }
             ConfigCommand::Generate => {
-                generate_config().await?;
+                generate_config()?;
             }
             ConfigCommand::Edit => {
-                edit_config().await?;
+                edit_config()?;
             }
             ConfigCommand::GoBack => return Ok(CommandExec::GoBack),
         };
@@ -98,8 +98,8 @@ impl ConfigCommand {
     }
 }
 
-async fn show_config() -> anyhow::Result<()> {
-    let config = ScillaConfig::load().await?;
+fn show_config() -> anyhow::Result<()> {
+    let config = ScillaConfig::load()?;
 
     let mut table = Table::new();
     table
@@ -124,7 +124,7 @@ async fn show_config() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn generate_config() -> anyhow::Result<()> {
+pub fn generate_config() -> anyhow::Result<()> {
     // Check if config already exists
     let config_path = scilla_config_path();
     if config_path.exists() {
@@ -220,8 +220,8 @@ pub async fn generate_config() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn edit_config() -> anyhow::Result<()> {
-    let mut config = ScillaConfig::load().await?;
+fn edit_config() -> anyhow::Result<()> {
+    let mut config = ScillaConfig::load()?;
 
     println!("\n{}", style("Edit Config").green().bold());
 

@@ -55,7 +55,7 @@ impl Command {
             Command::Transaction(transaction_command) => {
                 transaction_command.process_command(ctx).await
             }
-            Command::ScillaConfig(config_command) => config_command.process_command().await,
+            Command::ScillaConfig(config_command) => config_command.process_command(),
             Command::Exit => Ok(CommandExec::Exit),
         }
     }

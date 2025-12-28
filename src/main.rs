@@ -24,7 +24,7 @@ async fn main() -> ScillaResult<()> {
             .cyan()
     );
 
-    let config = ScillaConfig::load().await?;
+    let config = ScillaConfig::load()?;
     let ctx = ScillaContext::from_config(config)?;
 
     loop {

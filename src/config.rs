@@ -57,7 +57,7 @@ impl Default for ScillaConfig {
 }
 
 impl ScillaConfig {
-    pub async fn load() -> Result<ScillaConfig, ScillaError> {
+    pub fn load() -> Result<ScillaConfig, ScillaError> {
         let scilla_config_path = scilla_config_path();
 
         if !scilla_config_path.exists() {
@@ -80,7 +80,7 @@ impl ScillaConfig {
                 style("Let's set up your configuration to get started.\n").cyan()
             );
 
-            crate::commands::config::generate_config().await?;
+            crate::commands::config::generate_config()?;
 
             println!(
                 "\n{}",
