@@ -15,9 +15,9 @@ use {
     solana_keypair::{Keypair, Signer},
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::RpcGetVoteAccountsConfig,
-    solana_vote_program::{
-        vote_instruction::{self, CreateVoteAccountConfig, withdraw},
-        vote_state::{VoteAuthorize, VoteInit, VoteStateV4},
+    solana_vote_interface::{
+        instruction::{CreateVoteAccountConfig, authorize, create_account_with_config, withdraw},
+        state::{VoteAuthorize, VoteInit, VoteStateV4},
     },
     std::{fmt, path::PathBuf},
 };
@@ -186,7 +186,7 @@ async fn process_create_vote_account(
 
     // checking if vote account already exists
     if let Ok(response) = ctx.rpc().get_account(&vote_account_pubkey).await {
-        let err_msg = if response.owner == solana_vote_program::id() {
+        let err_msg = if response.owner == solana_vote_interface::program::id() {
             format!("Vote account {vote_account_pubkey} already exists")
         } else {
             format!("Account {vote_account_pubkey} already exists and is not a vote account")
@@ -207,7 +207,7 @@ async fn process_create_vote_account(
         commission,
     };
 
-    let instructions = vote_instruction::create_account_with_config(
+    let instructions = create_account_with_config(
         fee_payer_pubkey,
         &vote_account_pubkey,
         &vote_init,
@@ -246,7 +246,7 @@ async fn process_authorize_voter(
 
     let (vote_account, epoch_info) = fetch_account_with_epoch(ctx, vote_account_pubkey).await?;
 
-    if vote_account.owner != solana_vote_program::id() {
+    if vote_account.owner != solana_vote_interface::program::id() {
         bail!("{vote_account_pubkey} is not a vote account");
     }
 
@@ -271,7 +271,7 @@ async fn process_authorize_voter(
         );
     }
 
-    let vote_ix = vote_instruction::authorize(
+    let vote_ix = authorize(
         vote_account_pubkey,
         &authorized_pubkey,
         new_authorized_pubkey,
@@ -305,7 +305,7 @@ async fn process_sol_withdraw_from_vote_account(
         .await
         .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
 
-    if vote_account.owner != solana_vote_program::id() {
+    if vote_account.owner != solana_vote_interface::program::id() {
         bail!("{vote_account_pubkey} is not a vote account");
     }
 
@@ -401,7 +401,7 @@ async fn process_fetch_vote_account(
         .await
         .map_err(|_| anyhow!("{vote_account_pubkey} account does not exist"))?;
 
-    if vote_account.owner != solana_vote_program::id() {
+    if vote_account.owner != solana_vote_interface::program::id() {
         bail!("{vote_account_pubkey} is not a vote account");
     }
 
