@@ -2,7 +2,7 @@ use {
     crate::commands::{
         Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
         config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
-        vote::VoteCommand,
+        vote::VoteCommand, token::TokenCommand,
     },
     inquire::{Select, Text},
     std::str::FromStr,
@@ -12,6 +12,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
         "Choose a command group:",
         vec![
             CommandGroup::Account,
+            CommandGroup::Token,
             CommandGroup::Cluster,
             CommandGroup::Stake,
             CommandGroup::Vote,
@@ -25,6 +26,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
     let command = match top_level {
         CommandGroup::Cluster => Command::Cluster(prompt_cluster()?),
         CommandGroup::Stake => Command::Stake(prompt_stake()?),
+        CommandGroup::Token => Command::Token(prompt_token()?),
         CommandGroup::Account => Command::Account(prompt_account()?),
         CommandGroup::Vote => Command::Vote(prompt_vote()?),
         CommandGroup::ScillaConfig => Command::ScillaConfig(prompt_config()?),
@@ -33,6 +35,21 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
     };
 
     Ok(command)
+}
+
+fn prompt_token() -> anyhow::Result<TokenCommand> {
+    let choice = Select::new(
+        "Token Command:",
+        vec![
+            TokenCommand::ListTokenAccounts,
+            TokenCommand::TokenBalance,
+            TokenCommand::MintInfo,
+            TokenCommand::GoBack,
+        ],
+    )
+    .prompt()?;
+
+    Ok(choice)
 }
 
 fn prompt_cluster() -> anyhow::Result<ClusterCommand> {
