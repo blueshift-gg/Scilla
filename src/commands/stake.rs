@@ -12,7 +12,6 @@ use {
         ui::show_spinner,
     },
     anyhow::bail,
-    bincode,
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     solana_clock::Clock,
