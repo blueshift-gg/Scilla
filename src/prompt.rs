@@ -125,6 +125,7 @@ fn prompt_transaction() -> anyhow::Result<TransactionCommand> {
             TransactionCommand::FetchStatus,
             TransactionCommand::FetchTransaction,
             TransactionCommand::SendTransaction,
+            TransactionCommand::ParseInstruction,
             TransactionCommand::GoBack,
         ],
     )

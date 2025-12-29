@@ -21,6 +21,7 @@ pub enum TransactionCommand {
     FetchStatus,
     FetchTransaction,
     SendTransaction,
+    ParseInstruction,
     GoBack,
 }
 
@@ -31,6 +32,7 @@ impl TransactionCommand {
             Self::FetchStatus => "Fetching transaction status…",
             Self::FetchTransaction => "Fetching full transaction data…",
             Self::SendTransaction => "Sending transaction…",
+            Self::ParseInstruction => "Parsing instruction data…",
             Self::GoBack => "Going back…",
         }
     }
@@ -43,6 +45,7 @@ impl fmt::Display for TransactionCommand {
             Self::FetchStatus => "Fetch Transaction Status",
             Self::FetchTransaction => "Fetch Transaction",
             Self::SendTransaction => "Send Transaction",
+            Self::ParseInstruction => "Parse Instruction",
             Self::GoBack => "Go back",
         })
     }
@@ -93,6 +96,16 @@ impl TransactionCommand {
                 show_spinner(
                     self.spinner_msg(),
                     process_send_transaction(ctx, encoding, &encoded_tx),
+                )
+                .await;
+            }
+
+            TransactionCommand::ParseInstruction => {
+                let signature: Signature = prompt_input_data("Enter transaction signature:");
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_parse_instruction(ctx, &signature),
                 )
                 .await;
             }
@@ -364,5 +377,12 @@ async fn process_send_transaction(
         style(signature).cyan()
     );
 
+    Ok(())
+}
+
+async fn process_parse_instruction(
+    ctx: &ScillaContext,
+    signature: &Signature,
+) -> anyhow::Result<()> {
     Ok(())
 }
