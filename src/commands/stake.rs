@@ -502,7 +502,7 @@ async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
         } = entry;
 
         table.add_row(vec![
-            Cell::new(epoch.to_string()),
+            Cell::new(epoch),
             Cell::new(lamports_to_sol(*effective)),
             Cell::new(lamports_to_sol(*activating)),
             Cell::new(lamports_to_sol(*deactivating)),

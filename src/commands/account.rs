@@ -191,7 +191,7 @@ async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
         let balance_sol = lamports_to_sol(account.lamports);
         table.add_row(vec![
             Cell::new(format!("{}", idx + 1)),
-            Cell::new(account.address.clone()),
+            Cell::new(&account.address),
             Cell::new(format!("{balance_sol:.2}")),
         ]);
     }
@@ -210,7 +210,6 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
     let solana_nonce::state::State::Initialized(data) = versions.state() else {
         bail!("This account is not an initialized nonce account");
     };
-    let data = data.clone();
 
     let mut table = Table::new();
     table
@@ -219,7 +218,7 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![Cell::new("Address"), Cell::new(pubkey.to_string())])
+        .add_row(vec![Cell::new("Address"), Cell::new(pubkey)])
         .add_row(vec![
             Cell::new("Lamports"),
             Cell::new(format!("{}", account.lamports)),
@@ -228,10 +227,7 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
             Cell::new("Balance (SOL)"),
             Cell::new(format!("{:.6}", lamports_to_sol(account.lamports))),
         ])
-        .add_row(vec![
-            Cell::new("Owner"),
-            Cell::new(account.owner.to_string()),
-        ])
+        .add_row(vec![Cell::new("Owner"), Cell::new(account.owner)])
         .add_row(vec![
             Cell::new("Executable"),
             Cell::new(format!("{}", account.executable)),
@@ -242,12 +238,9 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
         ])
         .add_row(vec![
             Cell::new("Nonce blockhash"),
-            Cell::new(data.blockhash().to_string()),
+            Cell::new(data.blockhash()),
         ])
-        .add_row(vec![
-            Cell::new("Authority"),
-            Cell::new(data.authority.to_string()),
-        ]);
+        .add_row(vec![Cell::new("Authority"), Cell::new(data.authority)]);
 
     println!("\n{}", style("NONCE ACCOUNT INFO").green().bold());
     println!("{table}");

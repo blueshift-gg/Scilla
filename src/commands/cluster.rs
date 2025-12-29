@@ -239,8 +239,8 @@ async fn fetch_validators(ctx: &ScillaContext) -> anyhow::Result<()> {
             let stake_sol = (validator.activated_stake as f64).div(LAMPORTS_PER_SOL as f64);
             validators_table.add_row(vec![
                 Cell::new(format!("{}", idx + 1)),
-                Cell::new(validator.node_pubkey.clone()),
-                Cell::new(validator.vote_pubkey.clone()),
+                Cell::new(&validator.node_pubkey),
+                Cell::new(&validator.vote_pubkey),
                 Cell::new(format!("{stake_sol:.2}")),
             ]);
         }
@@ -334,7 +334,7 @@ async fn fetch_cluster_version(ctx: &ScillaContext) -> anyhow::Result<()> {
         ])
         .add_row(vec![
             Cell::new("Solana Core"),
-            Cell::new(version.solana_core.clone()),
+            Cell::new(version.solana_core),
         ]);
 
     if let Some(feature_set) = version.feature_set {

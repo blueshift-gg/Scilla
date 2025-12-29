@@ -125,14 +125,8 @@ async fn process_check_confirmation(
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![
-            Cell::new("Signature"),
-            Cell::new(signature.to_string()),
-        ])
-        .add_row(vec![
-            Cell::new("Status"),
-            Cell::new(status_styled.to_string()),
-        ]);
+        .add_row(vec![Cell::new("Signature"), Cell::new(signature)])
+        .add_row(vec![Cell::new("Status"), Cell::new(status_styled)]);
 
     println!("\n{}", style("TRANSACTION CONFIRMATION").green().bold());
     println!("{}", table);
@@ -157,14 +151,8 @@ async fn process_fetch_transaction_status(
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![
-            Cell::new("Signature"),
-            Cell::new(signature.to_string()),
-        ])
-        .add_row(vec![
-            Cell::new("Slot"),
-            Cell::new(tx_status.slot.to_string()),
-        ])
+        .add_row(vec![Cell::new("Signature"), Cell::new(signature)])
+        .add_row(vec![Cell::new("Slot"), Cell::new(tx_status.slot)])
         .add_row(vec![
             Cell::new("Status"),
             Cell::new(if tx_status.err.is_none() {
@@ -205,24 +193,15 @@ async fn process_fetch_transaction(
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![
-            Cell::new("Signature"),
-            Cell::new(signature.to_string()),
-        ])
-        .add_row(vec![Cell::new("Slot"), Cell::new(tx.slot.to_string())]);
+        .add_row(vec![Cell::new("Signature"), Cell::new(signature)])
+        .add_row(vec![Cell::new("Slot"), Cell::new(tx.slot)]);
 
     if let Some(block_time) = tx.block_time {
-        table.add_row(vec![
-            Cell::new("Block Time"),
-            Cell::new(block_time.to_string()),
-        ]);
+        table.add_row(vec![Cell::new("Block Time"), Cell::new(block_time)]);
     }
 
     if let Some(meta) = &tx.transaction.meta {
-        table.add_row(vec![
-            Cell::new("Fee (lamports)"),
-            Cell::new(meta.fee.to_string()),
-        ]);
+        table.add_row(vec![Cell::new("Fee (lamports)"), Cell::new(meta.fee)]);
         table.add_row(vec![
             Cell::new("Status"),
             Cell::new(if meta.err.is_none() {
@@ -253,11 +232,11 @@ async fn process_fetch_transaction(
                 ])
                 .add_row(vec![
                     Cell::new("Account Keys"),
-                    Cell::new(parsed_msg.account_keys.len().to_string()),
+                    Cell::new(parsed_msg.account_keys.len()),
                 ])
                 .add_row(vec![
                     Cell::new("Recent Blockhash"),
-                    Cell::new(parsed_msg.recent_blockhash.clone()),
+                    Cell::new(&parsed_msg.recent_blockhash),
                 ]);
 
             println!("{}", msg_table);
@@ -274,8 +253,8 @@ async fn process_fetch_transaction(
 
                 for (idx, account) in parsed_msg.account_keys.iter().enumerate() {
                     accounts_table.add_row(vec![
-                        Cell::new(idx.to_string()),
-                        Cell::new(account.pubkey.clone()),
+                        Cell::new(idx),
+                        Cell::new(&account.pubkey),
                         Cell::new(if account.signer { "✓" } else { "" }),
                         Cell::new(if account.writable { "✓" } else { "" }),
                     ]);
@@ -295,11 +274,11 @@ async fn process_fetch_transaction(
                 ])
                 .add_row(vec![
                     Cell::new("Account Keys"),
-                    Cell::new(raw_msg.account_keys.len().to_string()),
+                    Cell::new(raw_msg.account_keys.len()),
                 ])
                 .add_row(vec![
                     Cell::new("Recent Blockhash"),
-                    Cell::new(raw_msg.recent_blockhash.clone()),
+                    Cell::new(&raw_msg.recent_blockhash),
                 ]);
 
             println!("{}", msg_table);
@@ -335,7 +314,7 @@ async fn process_send_transaction(
     println!(
         "\n{} {}",
         style("Transaction sent successfully!").green().bold(),
-        style(signature.to_string()).cyan()
+        style(signature).cyan()
     );
 
     Ok(())

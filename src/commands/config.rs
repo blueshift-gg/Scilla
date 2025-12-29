@@ -132,11 +132,11 @@ fn show_config() -> anyhow::Result<()> {
         .add_row(vec![Cell::new("RPC URL"), Cell::new(config.rpc_url)])
         .add_row(vec![
             Cell::new("Commitment Level"),
-            Cell::new(config.commitment_level.to_string()),
+            Cell::new(config.commitment_level),
         ])
         .add_row(vec![
             Cell::new("Keypair Path"),
-            Cell::new(config.keypair_path.display().to_string()),
+            Cell::new(config.keypair_path.display()),
         ]);
 
     println!("\n{}", style("SCILLA CONFIG").green().bold());
@@ -186,9 +186,7 @@ pub fn generate_config() -> anyhow::Result<()> {
         let commitment_level =
             match Select::new("Select commitment level:", get_commitment_levels()).prompt()? {
                 UICommitmentOptions::Level(level) => level,
-                UICommitmentOptions::None => {
-                    return Ok(());
-                }
+                UICommitmentOptions::None => return Ok(()),
             };
 
         let default_keypair_path = ScillaConfig::default().keypair_path;
@@ -200,7 +198,7 @@ pub fn generate_config() -> anyhow::Result<()> {
             ))?;
 
             if keypair_input.as_os_str().is_empty() {
-                break default_keypair_path.clone();
+                break default_keypair_path;
             }
 
             if !keypair_input.exists() {
@@ -284,7 +282,7 @@ fn edit_config() -> anyhow::Result<()> {
             config.commitment_level = level
         }
         ConfigField::KeypairPath => {
-            let default_keypair_path = ScillaConfig::default().keypair_path;
+            let default_keypair_path = &ScillaConfig::default().keypair_path;
 
             loop {
                 let keypair_input: PathBuf = prompt_data(&format!(
@@ -293,7 +291,7 @@ fn edit_config() -> anyhow::Result<()> {
                 ))?;
 
                 if keypair_input.as_os_str().is_empty() {
-                    config.keypair_path = default_keypair_path.clone();
+                    config.keypair_path = default_keypair_path.to_path_buf();
                     break;
                 }
 
@@ -313,9 +311,7 @@ fn edit_config() -> anyhow::Result<()> {
                 break;
             }
         }
-        ConfigField::None => {
-            return Ok(());
-        }
+        ConfigField::None => return Ok(()),
     }
 
     // Write updated config

@@ -439,17 +439,14 @@ async fn process_fetch_vote_account(
         ])
         .add_row(vec![
             Cell::new("Validator Identity"),
-            Cell::new(vote_state.node_pubkey.to_string()),
+            Cell::new(vote_state.node_pubkey),
         ])
         .add_row(vec![Cell::new("Vote Authority"), Cell::new(vote_authority)])
         .add_row(vec![
             Cell::new("Withdraw Authority"),
-            Cell::new(vote_state.authorized_withdrawer.to_string()),
+            Cell::new(vote_state.authorized_withdrawer),
         ])
-        .add_row(vec![
-            Cell::new("Credits"),
-            Cell::new(vote_state.credits().to_string()),
-        ])
+        .add_row(vec![Cell::new("Credits"), Cell::new(vote_state.credits())])
         .add_row(vec![
             Cell::new("Commission"),
             Cell::new(format!(
