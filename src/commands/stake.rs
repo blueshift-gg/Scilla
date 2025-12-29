@@ -174,13 +174,11 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
         anyhow::bail!("Failed to get clock account");
     };
 
-    let stake_history: StakeHistory = bincode::deserialize(&stake_history_account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake history: {}", e))?;
-    let clock: Clock = bincode::deserialize(&clock_account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize clock: {}", e))?;
+    let stake_history: StakeHistory =
+        bincode_deserialize(&stake_history_account.data, "stake history account data")?;
+    let clock: Clock = bincode_deserialize(&clock_account.data, "clock account data")?;
 
-    let stake_state: StakeStateV2 = bincode::deserialize(&stake_account.data)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize stake state: {}", e))?;
+    let stake_state: StakeStateV2 = bincode_deserialize(&stake_account.data, "stake account data")?;
 
     let current_epoch = clock.epoch;
 
@@ -198,7 +196,7 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
         ])
         .add_row(vec![
             Cell::new("Account Balance (SOL)"),
-            Cell::new(lamports_to_sol(stake_account.lamports).to_string()),
+            Cell::new(lamports_to_sol(stake_account.lamports)),
         ])
         .add_row(vec![
             Cell::new("Account Balance (Lamports)"),
@@ -284,7 +282,7 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
                 ])
                 .add_row(vec![
                     Cell::new("Delegated Stake (SOL)"),
-                    Cell::new(lamports_to_sol(stake.delegation.stake).to_string()),
+                    Cell::new(lamports_to_sol(stake.delegation.stake)),
                 ])
                 .add_row(vec![
                     Cell::new("Activation Epoch"),
@@ -304,15 +302,15 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
                 ])
                 .add_row(vec![
                     Cell::new("Active Stake (SOL)"),
-                    Cell::new(lamports_to_sol(effective).to_string()),
+                    Cell::new(lamports_to_sol(effective)),
                 ])
                 .add_row(vec![
                     Cell::new("Activating Stake (SOL)"),
-                    Cell::new(lamports_to_sol(activating).to_string()),
+                    Cell::new(lamports_to_sol(activating)),
                 ])
                 .add_row(vec![
                     Cell::new("Deactivating Stake (SOL)"),
-                    Cell::new(lamports_to_sol(deactivating).to_string()),
+                    Cell::new(lamports_to_sol(deactivating)),
                 ])
                 .add_row(vec![
                     Cell::new("Credits Observed"),
