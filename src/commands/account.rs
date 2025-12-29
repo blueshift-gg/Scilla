@@ -3,7 +3,7 @@ use {
         commands::CommandExec,
         context::ScillaContext,
         error::ScillaResult,
-        misc::helpers::{bincode_deserialize, lamports_to_sol},
+        misc::helpers::{SolAmount, bincode_deserialize, build_and_send_tx, lamports_to_sol},
         prompt::prompt_data,
         ui::{print_error, show_spinner},
     },
@@ -70,7 +70,14 @@ impl AccountCommand {
                 show_spinner(self.spinner_msg(), fetch_account_balance(ctx, &pubkey)).await?;
             }
             AccountCommand::Transfer => {
-                // show_spinner(self.spinner_msg(), todo!()).await?;
+                let recipient: Pubkey = prompt_data("Enter Recipient Address:")?;
+                let amount: SolAmount = prompt_data("Enter Amount (SOL):")?;
+
+                show_spinner(
+                    self.spinner_msg(),
+                    process_transfer(ctx, &recipient, amount.to_lamports()),
+                )
+                .await?;
             }
             AccountCommand::Airdrop => {
                 show_spinner(self.spinner_msg(), request_sol_airdrop(ctx)).await?;
@@ -205,6 +212,12 @@ async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
 async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Result<()> {
     let account = ctx.rpc().get_account(pubkey).await?;
 
+    if account.data.is_empty() {
+        bail!(
+            "Account has no data. It might be uninitialized or a system account, not a valid nonce account."
+        );
+    }
+
     let versions = bincode_deserialize::<Versions>(&account.data, "nonce account data")?;
 
     let solana_nonce::state::State::Initialized(data) = versions.state() else {
@@ -250,6 +263,64 @@ async fn fetch_nonce_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Re
         ]);
 
     println!("\n{}", style("NONCE ACCOUNT INFO").green().bold());
+    println!("{table}");
+
+    Ok(())
+}
+
+async fn process_transfer(
+    ctx: &ScillaContext,
+    recipient: &Pubkey,
+    lamports: u64,
+) -> anyhow::Result<()> {
+    if recipient == ctx.pubkey() {
+        bail!("Cannot transfer SOL to your own address.");
+    }
+
+    // Check if recipient exists or has balance
+    let recipient_balance = ctx.rpc().get_balance(recipient).await.unwrap_or(0);
+
+    if recipient_balance == 0 {
+        let rent_exemption = ctx.rpc().get_minimum_balance_for_rent_exemption(0).await?;
+
+        if lamports < rent_exemption {
+            bail!(
+                "Recipient is a new account (0 SOL). You must transfer at least {} SOL to initialize it (Rent Exemption).",
+                lamports_to_sol(rent_exemption)
+            );
+        }
+    }
+
+    let transfer_ix =
+        solana_system_interface::instruction::transfer(&ctx.pubkey(), recipient, lamports);
+
+    let signature = build_and_send_tx(ctx, &[transfer_ix], &[ctx.keypair()]).await?;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Status"),
+            Cell::new("Success").fg(comfy_table::Color::Green),
+        ])
+        .add_row(vec![
+            Cell::new("Recipient"),
+            Cell::new(recipient.to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Amount"),
+            Cell::new(format!("{} SOL", lamports_to_sol(lamports))),
+        ])
+        .add_row(vec![
+            Cell::new("Signature"),
+            Cell::new(signature.to_string()),
+        ]);
+
+    println!("\n{}", style("TRANSFER SUMMARY").green().bold());
     println!("{table}");
 
     Ok(())
