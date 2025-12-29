@@ -43,6 +43,8 @@ solana-sdk-ids = "3"
 base64 = "0.22.1"
 bs58 = "0.5.1"
 solana-transaction-status = "3.1.4"
+spl-token-2022 = "10.0.0"
+spl-associated-token-account = "8.0.0"
 
 
 [dev-dependencies]
