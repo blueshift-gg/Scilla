@@ -8,7 +8,7 @@ use {
         ui::{print_error, show_spinner},
     },
     anyhow::bail,
-    comfy_table::{presets::UTF8_FULL, Cell, Table},
+    comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::Select,
     solana_nonce::versions::Versions,

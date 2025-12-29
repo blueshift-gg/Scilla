@@ -1,7 +1,7 @@
 [package]
 name = "scilla"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 inquire = "0.9.1"
@@ -24,11 +24,11 @@ dirs = "5.0"
 # solana
 solana-system-interface = { version = "3.0.0", features = ["bincode"] }
 solana-vote-program = "3"
-solana-instruction = "3.1.0"
+solana-instruction = "3"
 solana-native-token = "3"
-solana-message = "3.0.1"
+solana-message = "3"
 solana-stake-interface = "2"
-solana-transaction = "3.0.2"
+solana-transaction = "3"
 solana-account = "3"
 solana-epoch-info = "3"
 solana-rpc-client = "3"
@@ -41,7 +41,7 @@ solana-nonce = "3"
 solana-sdk-ids = "3"
 base64 = "0.22.1"
 bs58 = "0.5.1"
-solana-transaction-status = "3.1.4"
+solana-transaction-status = "3"
 
 
 

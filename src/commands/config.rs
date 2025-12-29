@@ -1,11 +1,11 @@
 use {
     crate::{
         commands::CommandExec,
-        config::{scilla_config_path, ScillaConfig},
+        config::{ScillaConfig, scilla_config_path},
         error::ScillaResult,
         prompt::prompt_data,
     },
-    comfy_table::{presets::UTF8_FULL, Cell, Table},
+    comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::{Confirm, Select},
     solana_commitment_config::CommitmentLevel,

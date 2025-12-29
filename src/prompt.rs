@@ -1,8 +1,8 @@
 use {
     crate::commands::{
-        account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
-        stake::StakeCommand, transaction::TransactionCommand, vote::VoteCommand, Command,
-        CommandGroup,
+        Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
+        config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
+        vote::VoteCommand,
     },
     inquire::{Select, Text},
     std::str::FromStr,

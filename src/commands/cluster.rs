@@ -3,7 +3,7 @@ use {
         commands::CommandExec, constants::LAMPORTS_PER_SOL, context::ScillaContext,
         error::ScillaResult, ui::show_spinner,
     },
-    comfy_table::{presets::UTF8_FULL, Cell, Table},
+    comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     std::{fmt, ops::Div},
 };
