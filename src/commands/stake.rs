@@ -92,6 +92,21 @@ impl StakeCommand {
                 let amount_sol: SolAmount = prompt_data("Enter amount to stake (in SOL):")?;
                 let withdraw_authority_keypair_path: PathBuf =
                     prompt_data("Enter Withdraw Authority Keypair Path: ")?;
+                let configure_lockup: bool = prompt_data("Enter lockup configuration? (y/n): ")?;
+
+                let lockup = if configure_lockup {
+                    let epoch: u64 = prompt_data("Enter Lockup Epoch: ")?;
+                    let unix_timestamp: i64 = prompt_data("Enter Lockup Date (Unix TimeStamp): ")?;
+                    let custodian: Pubkey = prompt_data("Enter Lockup Custodian Pubkey: ")?;
+
+                    Lockup {
+                        epoch,
+                        unix_timestamp,
+                        custodian,
+                    }
+                } else {
+                    Lockup::default()
+                };
 
                 show_spinner(
                     self.spinner_msg(),
@@ -100,6 +115,7 @@ impl StakeCommand {
                         stake_account_keypair_path,
                         amount_sol,
                         withdraw_authority_keypair_path,
+                        lockup,
                     ),
                 )
                 .await?;
@@ -198,6 +214,7 @@ async fn process_create_stake_account(
     stake_account_keypair_path: PathBuf,
     amount_sol: SolAmount,
     withdraw_authority_keypair_path: PathBuf,
+    lockup: Lockup,
 ) -> anyhow::Result<()> {
     let stake_account_keypair = read_keypair_from_path(stake_account_keypair_path)?;
     let withdraw_authority_pubkey =
@@ -231,7 +248,7 @@ async fn process_create_stake_account(
         ctx.pubkey(),
         &stake_account_keypair.pubkey(),
         &authorized,
-        &Lockup::default(),
+        &lockup,
         total_lamports,
     );
 
@@ -316,7 +333,7 @@ async fn process_create_stake_account(
                     Cell::new(authorized.withdrawer.to_string()),
                 ]);
 
-            if lockup.is_in_force(&clock, None) {
+            if !lockup.is_in_force(&clock, None) {
                 table
                     .add_row(vec![
                         Cell::new("Lockup Epoch"),
