@@ -5,9 +5,11 @@ use {
         error::ScillaResult,
         prompt::prompt_data,
     },
+    anyhow::Ok,
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::{Confirm, Select},
+    serde::{Deserialize, Serialize},
     solana_commitment_config::CommitmentLevel,
     std::{fmt, fs, path::PathBuf},
 };
@@ -49,6 +51,7 @@ enum ConfigField {
     RpcUrl,
     CommitmentLevel,
     KeypairPath,
+    None, // if None is chosen , we go back to previous context
 }
 
 impl fmt::Display for ConfigField {
@@ -57,6 +60,7 @@ impl fmt::Display for ConfigField {
             ConfigField::RpcUrl => write!(f, "RPC URL"),
             ConfigField::CommitmentLevel => write!(f, "Commitment Level"),
             ConfigField::KeypairPath => write!(f, "Keypair Path"),
+            ConfigField::None => write!(f, "None"),
         }
     }
 }
@@ -67,15 +71,32 @@ impl ConfigField {
             ConfigField::RpcUrl,
             ConfigField::CommitmentLevel,
             ConfigField::KeypairPath,
+            ConfigField::None,
         ]
     }
 }
 
-fn get_commitment_levels() -> Vec<CommitmentLevel> {
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UICommitmentOptions {
+    Level(CommitmentLevel),
+    None,
+}
+
+impl fmt::Display for UICommitmentOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UICommitmentOptions::Level(level) => write!(f, "{:?}", level),
+            UICommitmentOptions::None => write!(f, "None"),
+        }
+    }
+}
+
+fn get_commitment_levels() -> Vec<UICommitmentOptions> {
     vec![
-        CommitmentLevel::Processed,
-        CommitmentLevel::Confirmed,
-        CommitmentLevel::Finalized,
+        UICommitmentOptions::Level(CommitmentLevel::Processed),
+        UICommitmentOptions::Level(CommitmentLevel::Confirmed),
+        UICommitmentOptions::Level(CommitmentLevel::Finalized),
+        UICommitmentOptions::None,
     ]
 }
 
@@ -163,7 +184,12 @@ pub fn generate_config() -> anyhow::Result<()> {
         let rpc_url: String = prompt_data("Enter RPC URL:")?;
 
         let commitment_level =
-            Select::new("Select commitment level:", get_commitment_levels()).prompt()?;
+            match Select::new("Select commitment level:", get_commitment_levels()).prompt()? {
+                UICommitmentOptions::Level(level) => level,
+                UICommitmentOptions::None => {
+                    return Ok(());
+                }
+            };
 
         let default_keypair_path = ScillaConfig::default().keypair_path;
 
@@ -247,8 +273,15 @@ fn edit_config() -> anyhow::Result<()> {
             config.rpc_url = prompt_data("Enter RPC URL:")?;
         }
         ConfigField::CommitmentLevel => {
-            config.commitment_level =
-                Select::new("Select commitment level:", get_commitment_levels()).prompt()?;
+            let selected =
+                Select::new("Select Commitment Level", get_commitment_levels()).prompt()?;
+
+            let level = match selected {
+                UICommitmentOptions::Level(level) => level,
+                UICommitmentOptions::None => return Ok(()),
+            };
+
+            config.commitment_level = level
         }
         ConfigField::KeypairPath => {
             let default_keypair_path = ScillaConfig::default().keypair_path;
@@ -279,6 +312,9 @@ fn edit_config() -> anyhow::Result<()> {
                 config.keypair_path = keypair_input;
                 break;
             }
+        }
+        ConfigField::None => {
+            return Ok(());
         }
     }
 
