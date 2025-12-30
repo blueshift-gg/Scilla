@@ -24,10 +24,10 @@ async fn main() -> ScillaResult<()> {
             .cyan()
     );
 
-    let config = ScillaConfig::load()?;
-    let ctx = ScillaContext::from_config(config)?;
-
     loop {
+        let config = ScillaConfig::load()?;
+        let ctx = ScillaContext::from_config(config)?;
+
         let command = prompt_for_command()?;
 
         let res = command.process_command(&ctx).await?;
