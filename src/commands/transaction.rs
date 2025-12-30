@@ -138,11 +138,17 @@ async fn process_fetch_transaction_status(
     ctx: &ScillaContext,
     signature: &Signature,
 ) -> anyhow::Result<()> {
-    let status = ctx.rpc().get_signature_statuses(&[*signature]).await?;
-
-    let Some(Some(tx_status)) = status.value.first() else {
-        anyhow::bail!("Transaction not found");
-    };
+    let tx = ctx
+        .rpc()
+        .get_transaction_with_config(
+            signature,
+            RpcTransactionConfig {
+                encoding: Some(UiTransactionEncoding::JsonParsed),
+                commitment: Some(ctx.rpc().commitment()),
+                max_supported_transaction_version: Some(0),
+            },
+        )
+        .await?;
 
     let mut table = Table::new();
     table
@@ -151,18 +157,24 @@ async fn process_fetch_transaction_status(
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![Cell::new("Signature"), Cell::new(signature)])
-        .add_row(vec![Cell::new("Slot"), Cell::new(tx_status.slot)])
         .add_row(vec![
+            Cell::new("Signature"),
+            Cell::new(signature),
+        ])
+        .add_row(vec![Cell::new("Slot"), Cell::new(tx.slot)]);
+
+    if let Some(meta) = &tx.transaction.meta {
+        table.add_row(vec![
             Cell::new("Status"),
-            Cell::new(if tx_status.err.is_none() {
+            Cell::new(if meta.err.is_none() {
                 style("Success").green().to_string()
             } else {
-                style(format!("Error: {:?}", tx_status.err))
-                    .red()
-                    .to_string()
+                style(format!("Error: {:?}", meta.err)).red().to_string()
             }),
         ]);
+    } else {
+        table.add_row(vec![Cell::new("Status"), Cell::new("Unknown")]);
+    }
 
     println!("\n{}", style("TRANSACTION STATUS").green().bold());
     println!("{}", table);
