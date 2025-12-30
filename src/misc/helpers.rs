@@ -242,7 +242,7 @@ mod tests {
         let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
 
         let VersionedMessage::Legacy(message) = &tx.message else {
-            panic!("Expected legacy message format");
+            panic!("Expected legacy message format, but got a different versioned message");
         };
 
         let memo_program_pubkey = Pubkey::from_str(MEMO_PROGRAM_ID)?;

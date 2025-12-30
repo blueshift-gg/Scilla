@@ -126,8 +126,12 @@ fn show_config() -> anyhow::Result<()> {
     table
         .load_preset(UTF8_FULL)
         .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Field")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Value")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
         ])
         .add_row(vec![Cell::new("RPC URL"), Cell::new(config.rpc_url)])
         .add_row(vec![
@@ -147,7 +151,7 @@ fn show_config() -> anyhow::Result<()> {
 
 pub fn generate_config() -> anyhow::Result<()> {
     // Check if config already exists
-    let config_path = scilla_config_path();
+    let config_path = scilla_config_path()?;
     if config_path.exists() {
         println!(
             "\n{}",
@@ -224,7 +228,7 @@ pub fn generate_config() -> anyhow::Result<()> {
     };
 
     // Write config
-    let config_path = scilla_config_path();
+    let config_path = scilla_config_path()?;
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -315,7 +319,7 @@ fn edit_config() -> anyhow::Result<()> {
     }
 
     // Write updated config
-    let config_path = scilla_config_path();
+    let config_path = scilla_config_path()?;
     let toml_string = toml::to_string_pretty(&config)?;
     fs::write(&config_path, toml_string)?;
 

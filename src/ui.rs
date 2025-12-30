@@ -10,7 +10,7 @@ where
     let spinner = ProgressBar::new_spinner();
     spinner.set_style(
         ProgressStyle::with_template("{spinner:.cyan} {msg}")
-            .unwrap()
+            .expect("Failed to create progress bar template - this is a bug in the template string")
             .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
     );
     spinner.enable_steady_tick(std::time::Duration::from_millis(100));
