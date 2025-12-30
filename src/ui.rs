@@ -17,7 +17,11 @@ where
     spinner.set_message(message.to_string());
 
     let result = fut.await;
-    spinner.finish_with_message("✅ Done");
+
+    match &result {
+        Ok(_) => spinner.finish_with_message("✅ Done"),
+        Err(_) => spinner.finish_with_message(format!("{}", style("❌ Error").red())),
+    }
 
     result
 }
