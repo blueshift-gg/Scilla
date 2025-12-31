@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::CommandExec, config::ScillaConfig, context::ScillaContext, error::ScillaResult,
+        commands::CommandFlow, config::ScillaConfig, context::ScillaContext, error::ScillaResult,
         prompt::prompt_for_command,
     },
     console::style,
@@ -24,20 +24,20 @@ async fn main() -> ScillaResult<()> {
             .cyan()
     );
 
-    loop {
-        let config = ScillaConfig::load()?;
-        let ctx = ScillaContext::from_config(config)?;
+    let config = ScillaConfig::load()?;
+    let mut ctx = ScillaContext::try_from(config)?;
 
+    loop {
         let command = prompt_for_command()?;
 
-        let res = command.process_command(&ctx).await?;
+        let res = command.process_command(&mut ctx).await;
 
         match res {
-            CommandExec::Process(_) => continue,
-            CommandExec::GoBack => continue,
-            CommandExec::Exit => break,
+            CommandFlow::Process(_) => continue,
+            CommandFlow::GoBack => continue,
+            CommandFlow::Exit => break,
         }
     }
 
-    Ok(CommandExec::Exit)
+    Ok(CommandFlow::Exit)
 }

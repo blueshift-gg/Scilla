@@ -1,11 +1,11 @@
 use {
     crate::{
-        commands::CommandExec,
+        commands::CommandFlow,
         config::{ScillaConfig, scilla_config_path},
-        error::ScillaResult,
-        prompt::prompt_data,
+        context::ScillaContext,
+        prompt::prompt_input_data,
+        ui::print_error,
     },
-    anyhow::Ok,
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::{Confirm, Select},
@@ -18,7 +18,6 @@ use {
 #[derive(Debug, Clone)]
 pub enum ConfigCommand {
     Show,
-    Generate,
     Edit,
     GoBack,
 }
@@ -27,7 +26,6 @@ impl ConfigCommand {
     pub fn spinner_msg(&self) -> &'static str {
         match self {
             ConfigCommand::Show => "Displaying current Scilla configuration…",
-            ConfigCommand::Generate => "Generating new Scilla configuration…",
             ConfigCommand::Edit => "Editing existing Scilla configuration…",
             ConfigCommand::GoBack => "Going back…",
         }
@@ -38,7 +36,6 @@ impl fmt::Display for ConfigCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let command = match self {
             ConfigCommand::Show => "View ScillaConfig",
-            ConfigCommand::Generate => "Generate ScillaConfig",
             ConfigCommand::Edit => "Edit ScillaConfig",
             ConfigCommand::GoBack => "Go back",
         };
@@ -101,28 +98,24 @@ fn get_commitment_levels() -> Vec<UICommitmentOptions> {
 }
 
 impl ConfigCommand {
-    pub fn process_command(&self) -> ScillaResult<()> {
-        match self {
-            ConfigCommand::Show => {
-                show_config()?;
-            }
-            ConfigCommand::Generate => {
-                generate_config()?;
-            }
-            ConfigCommand::Edit => {
-                edit_config()?;
-            }
-            ConfigCommand::GoBack => return Ok(CommandExec::GoBack),
+    pub fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow<()> {
+        let res = match self {
+            ConfigCommand::Show => show_config(),
+            ConfigCommand::Edit => edit_config(ctx),
+            ConfigCommand::GoBack => return CommandFlow::GoBack,
         };
 
-        Ok(CommandExec::Process(()))
+        if let Err(e) = res {
+            print_error(e.to_string())
+        }
+
+        CommandFlow::Process(())
     }
 }
 
 fn show_config() -> anyhow::Result<()> {
-    let config = ScillaConfig::load()?;
-
     let mut table = Table::new();
+    let config = ScillaConfig::load()?;
     table
         .load_preset(UTF8_FULL)
         .set_header(vec![
@@ -149,10 +142,7 @@ pub fn generate_config() -> anyhow::Result<()> {
     // Check if config already exists
     let config_path = scilla_config_path();
     if config_path.exists() {
-        println!(
-            "\n{}",
-            style("⚠ Config file already exists!").yellow().bold()
-        );
+        println!("{}", style("Config file already exists!").yellow().bold());
         println!(
             "{}",
             style(format!("Location: {}", config_path.display())).cyan()
@@ -174,14 +164,14 @@ pub fn generate_config() -> anyhow::Result<()> {
     let config = if use_defaults {
         let config = ScillaConfig::default();
 
-        println!("\n{}", style("Using default configuration:").cyan());
+        println!("{}", style("Using default configuration:").cyan());
         println!("  RPC: {}", config.rpc_url);
         println!("  Commitment: {:?}", config.commitment_level);
         println!("  Keypair: {}", config.keypair_path.display());
 
         config
     } else {
-        let rpc_url: String = prompt_data("Enter RPC URL:")?;
+        let rpc_url: String = prompt_input_data("Enter RPC URL:");
 
         let commitment_level =
             match Select::new("Select commitment level:", get_commitment_levels()).prompt()? {
@@ -192,10 +182,10 @@ pub fn generate_config() -> anyhow::Result<()> {
         let default_keypair_path = ScillaConfig::default().keypair_path;
 
         let keypair_path = loop {
-            let keypair_input: PathBuf = prompt_data(&format!(
+            let keypair_input: PathBuf = prompt_input_data(&format!(
                 "Enter keypair path (press Enter to use default: {}): ",
                 default_keypair_path.display()
-            ))?;
+            ));
 
             if keypair_input.as_os_str().is_empty() {
                 break default_keypair_path;
@@ -232,10 +222,7 @@ pub fn generate_config() -> anyhow::Result<()> {
     let toml_string = toml::to_string_pretty(&config)?;
     fs::write(&config_path, toml_string)?;
 
-    println!(
-        "\n{}",
-        style("✓ Config generated successfully!").green().bold()
-    );
+    println!("{}", style("Config generated successfully!").green().bold());
     println!(
         "{}",
         style(format!("Saved to: {}", config_path.display())).cyan()
@@ -244,7 +231,7 @@ pub fn generate_config() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn edit_config() -> anyhow::Result<()> {
+fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
     let mut config = ScillaConfig::load()?;
 
     println!("\n{}", style("Edit Config").green().bold());
@@ -264,11 +251,11 @@ fn edit_config() -> anyhow::Result<()> {
 
     // Prompt user to select which field to edit
     let field_options = ConfigField::all();
-    let selected_field = Select::new("\nSelect field to edit:", field_options).prompt()?;
+    let selected_field = Select::new("Select field to edit:", field_options).prompt()?;
 
     match selected_field {
         ConfigField::RpcUrl => {
-            config.rpc_url = prompt_data("Enter RPC URL:")?;
+            config.rpc_url = prompt_input_data("Enter RPC URL:");
         }
         ConfigField::CommitmentLevel => {
             let selected =
@@ -285,10 +272,10 @@ fn edit_config() -> anyhow::Result<()> {
             let default_keypair_path = &ScillaConfig::default().keypair_path;
 
             loop {
-                let keypair_input: PathBuf = prompt_data(&format!(
+                let keypair_input: PathBuf = prompt_input_data(&format!(
                     "Enter new keypair path (leave empty to use default: {}): ",
                     default_keypair_path.display()
-                ))?;
+                ));
 
                 if keypair_input.as_os_str().is_empty() {
                     config.keypair_path = default_keypair_path.to_path_buf();
@@ -319,10 +306,9 @@ fn edit_config() -> anyhow::Result<()> {
     let toml_string = toml::to_string_pretty(&config)?;
     fs::write(&config_path, toml_string)?;
 
-    println!(
-        "\n{}",
-        style("✓ Config updated successfully!").green().bold()
-    );
+    ctx.reload(config)?;
+
+    println!("{}", style("Config updated successfully!").green().bold());
     println!(
         "{}",
         style(format!("Saved to: {}", config_path.display())).cyan()

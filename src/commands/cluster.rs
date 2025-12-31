@@ -1,7 +1,7 @@
 use {
     crate::{
-        commands::CommandExec, constants::LAMPORTS_PER_SOL, context::ScillaContext,
-        error::ScillaResult, ui::show_spinner,
+        commands::CommandFlow, constants::LAMPORTS_PER_SOL, context::ScillaContext,
+        ui::show_spinner,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
@@ -56,38 +56,38 @@ impl fmt::Display for ClusterCommand {
 }
 
 impl ClusterCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
         match self {
             ClusterCommand::EpochInfo => {
-                show_spinner(self.spinner_msg(), fetch_epoch_info(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_epoch_info(ctx)).await;
             }
             ClusterCommand::CurrentSlot => {
-                show_spinner(self.spinner_msg(), fetch_current_slot(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_current_slot(ctx)).await;
             }
             ClusterCommand::BlockHeight => {
-                show_spinner(self.spinner_msg(), fetch_block_height(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_block_height(ctx)).await;
             }
             ClusterCommand::BlockTime => {
-                show_spinner(self.spinner_msg(), fetch_block_time(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_block_time(ctx)).await;
             }
             ClusterCommand::Validators => {
-                show_spinner(self.spinner_msg(), fetch_validators(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_validators(ctx)).await;
             }
             ClusterCommand::SupplyInfo => {
-                show_spinner(self.spinner_msg(), fetch_supply_info(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_supply_info(ctx)).await;
             }
             ClusterCommand::Inflation => {
-                show_spinner(self.spinner_msg(), fetch_inflation_info(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_inflation_info(ctx)).await;
             }
             ClusterCommand::ClusterVersion => {
-                show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await;
             }
             ClusterCommand::GoBack => {
-                return Ok(CommandExec::GoBack);
+                return CommandFlow::GoBack;
             }
         }
 
-        Ok(CommandExec::Process(()))
+        CommandFlow::Process(())
     }
 }
 

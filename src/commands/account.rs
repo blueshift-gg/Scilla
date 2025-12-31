@@ -1,10 +1,9 @@
 use {
     crate::{
-        commands::CommandExec,
+        commands::CommandFlow,
         context::ScillaContext,
-        error::ScillaResult,
         misc::helpers::{bincode_deserialize, lamports_to_sol},
-        prompt::prompt_data,
+        prompt::prompt_input_data,
         ui::{print_error, show_spinner},
     },
     anyhow::bail,
@@ -59,35 +58,35 @@ impl fmt::Display for AccountCommand {
 }
 
 impl AccountCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
         match self {
             AccountCommand::FetchAccount => {
-                let pubkey: Pubkey = prompt_data("Enter Pubkey:")?;
-                show_spinner(self.spinner_msg(), fetch_acc_data(ctx, &pubkey)).await?;
+                let pubkey: Pubkey = prompt_input_data("Enter Pubkey:");
+                show_spinner(self.spinner_msg(), fetch_acc_data(ctx, &pubkey)).await;
             }
             AccountCommand::Balance => {
-                let pubkey: Pubkey = prompt_data("Enter Pubkey :")?;
-                show_spinner(self.spinner_msg(), fetch_account_balance(ctx, &pubkey)).await?;
+                let pubkey: Pubkey = prompt_input_data("Enter Pubkey :");
+                show_spinner(self.spinner_msg(), fetch_account_balance(ctx, &pubkey)).await;
             }
             AccountCommand::Transfer => {
                 // show_spinner(self.spinner_msg(), todo!()).await?;
             }
             AccountCommand::Airdrop => {
-                show_spinner(self.spinner_msg(), request_sol_airdrop(ctx)).await?;
+                show_spinner(self.spinner_msg(), request_sol_airdrop(ctx)).await;
             }
             AccountCommand::LargestAccounts => {
-                show_spinner(self.spinner_msg(), fetch_largest_accounts(ctx)).await?;
+                show_spinner(self.spinner_msg(), fetch_largest_accounts(ctx)).await;
             }
             AccountCommand::NonceAccount => {
-                let pubkey: Pubkey = prompt_data("Enter nonce account pubkey:")?;
-                show_spinner(self.spinner_msg(), fetch_nonce_account(ctx, &pubkey)).await?;
+                let pubkey: Pubkey = prompt_input_data("Enter nonce account pubkey:");
+                show_spinner(self.spinner_msg(), fetch_nonce_account(ctx, &pubkey)).await;
             }
             AccountCommand::GoBack => {
-                return Ok(CommandExec::GoBack);
+                return CommandFlow::GoBack;
             }
         }
 
-        Ok(CommandExec::Process(()))
+        CommandFlow::Process(())
     }
 }
 
@@ -150,7 +149,7 @@ async fn fetch_account_balance(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::
     let acc_balance = lamports_to_sol(acc.lamports);
 
     println!(
-        "{}\n{}",
+        "{} {}",
         style("Account balance in SOL:").green().bold(),
         style(format!("{acc_balance:#?}")).cyan()
     );

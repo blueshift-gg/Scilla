@@ -1,6 +1,6 @@
-use {crate::commands::CommandExec, thiserror::Error};
+use {crate::commands::CommandFlow, thiserror::Error};
 
-pub type ScillaResult<T> = anyhow::Result<CommandExec<T>>;
+pub type ScillaResult<T> = anyhow::Result<CommandFlow<T>>;
 
 #[derive(Debug, Error)]
 pub enum ScillaError {

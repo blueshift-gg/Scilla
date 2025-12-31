@@ -1,8 +1,10 @@
 use {
     crate::{
+        commands::config::generate_config,
         constants::{DEFAULT_KEYPAIR_PATH, DEVNET_RPC, SCILLA_CONFIG_RELATIVE_PATH},
         error::ScillaError,
     },
+    console::style,
     serde::{Deserialize, Serialize},
     solana_commitment_config::CommitmentLevel,
     std::{env::home_dir, fs, path::PathBuf},
@@ -61,12 +63,7 @@ impl ScillaConfig {
         let scilla_config_path = scilla_config_path();
 
         if !scilla_config_path.exists() {
-            use console::style;
-
-            println!(
-                "\n{}",
-                style("No configuration file found!").yellow().bold()
-            );
+            println!("{}", style("No configuration file found!").yellow().bold());
             println!(
                 "{}",
                 style(format!(
@@ -77,20 +74,23 @@ impl ScillaConfig {
             );
             println!(
                 "{}",
-                style("Let's set up your configuration to get started.\n").cyan()
+                style("Let's set up your configuration to get started.").cyan()
             );
 
-            crate::commands::config::generate_config()?;
+            generate_config()?;
 
             println!(
-                "\n{}",
-                style("Configuration complete! Starting Scilla...\n")
+                "{}",
+                style("Configuration complete! Starting Scilla...")
                     .green()
                     .bold()
             );
         }
 
-        println!("Using Scilla config path : {scilla_config_path:?}");
+        println!(
+            "{}",
+            style(format!("Using Scilla config path : {scilla_config_path:?}")).dim()
+        );
         let data = fs::read_to_string(scilla_config_path)?;
         let config: ScillaConfig = toml::from_str(&data)?;
         Ok(config)

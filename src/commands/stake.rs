@@ -1,18 +1,17 @@
 use {
     crate::{
-        commands::CommandExec,
+        commands::CommandFlow,
         constants::{
             ACTIVE_STAKE_EPOCH_BOUND, DEFAULT_EPOCH_LIMIT, LAMPORTS_PER_SOL,
             STAKE_HISTORY_SYSVAR_ADDR,
         },
         context::ScillaContext,
-        error::ScillaResult,
         misc::helpers::{
             SolAmount, bincode_deserialize, bincode_deserialize_with_limit, build_and_send_tx,
             check_minimum_balance, fetch_account_with_epoch, lamports_to_sol,
             read_keypair_from_path, sol_to_lamports,
         },
-        prompt::prompt_data,
+        prompt::prompt_input_data,
         ui::show_spinner,
     },
     anyhow::{anyhow, bail},
@@ -84,21 +83,22 @@ impl fmt::Display for StakeCommand {
 }
 
 impl StakeCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
         match self {
             StakeCommand::Create => {
                 let stake_account_keypair_path: PathBuf =
-                    prompt_data("Enter Stake Account Keypair Path: ")?;
-                let amount_sol: SolAmount = prompt_data("Enter amount to stake (in SOL):")?;
+                    prompt_input_data("Enter Stake Account Keypair Path: ");
+                let amount_sol: SolAmount = prompt_input_data("Enter amount to stake (in SOL):");
                 let withdraw_authority_keypair_path: PathBuf =
-                    prompt_data("Enter Withdraw Authority Keypair Path: ")?;
+                    prompt_input_data("Enter Withdraw Authority Keypair Path: ")?;
                 let configure_lockup: bool =
-                    prompt_data("Would you like to set up lockup configuration? (y/n): ")?;
+                    prompt_input_data("Would you like to set up lockup configuration? (y/n): ");
 
                 let lockup = if configure_lockup {
-                    let epoch: u64 = prompt_data("Enter Lockup Epoch: ")?;
-                    let unix_timestamp: i64 = prompt_data("Enter Lockup Date (Unix TimeStamp): ")?;
-                    let custodian: Pubkey = prompt_data("Enter Lockup Custodian Pubkey: ")?;
+                    let epoch: u64 = prompt_input_data("Enter Lockup Epoch: ");
+                    let unix_timestamp: i64 =
+                        prompt_input_data("Enter Lockup Date (Unix TimeStamp): ");
+                    let custodian: Pubkey = prompt_input_data("Enter Lockup Custodian Pubkey: ");
 
                     Lockup {
                         epoch,
@@ -119,13 +119,14 @@ impl StakeCommand {
                         lockup,
                     ),
                 )
-                .await?;
+                .await;
             }
             StakeCommand::Delegate => {
-                let stake_account_pubkey: Pubkey = prompt_data("Enter Stake Account Pubkey: ")?;
-                let vote_account_pubkey: Pubkey = prompt_data("Enter Vote Account Pubkey: ")?;
+                let stake_account_pubkey: Pubkey =
+                    prompt_input_data("Enter Stake Account Pubkey: ");
+                let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Pubkey: ");
                 let stake_authority_keypair_path: PathBuf =
-                    prompt_data("Enter Stake Authority Keypair Path: ")?;
+                    prompt_input_data("Enter Stake Authority Keypair Path: ");
 
                 show_spinner(
                     self.spinner_msg(),
@@ -136,36 +137,36 @@ impl StakeCommand {
                         stake_authority_keypair_path,
                     ),
                 )
-                .await?;
+                .await;
             }
             StakeCommand::Deactivate => {
                 let stake_pubkey: Pubkey =
-                    prompt_data("Enter Stake Account Pubkey to Deactivate:")?;
+                    prompt_input_data("Enter Stake Account Pubkey to Deactivate:");
                 show_spinner(
                     self.spinner_msg(),
                     process_deactivate_stake_account(ctx, &stake_pubkey),
                 )
-                .await?;
+                .await;
             }
             StakeCommand::Withdraw => {
                 let stake_pubkey: Pubkey =
-                    prompt_data("Enter Stake Account Pubkey to Withdraw from:")?;
-                let recipient: Pubkey = prompt_data("Enter Recipient Address:")?;
-                let amount: SolAmount = prompt_data("Enter Amount to Withdraw (SOL):")?;
+                    prompt_input_data("Enter Stake Account Pubkey to Withdraw from:");
+                let recipient: Pubkey = prompt_input_data("Enter Recipient Address:");
+                let amount: SolAmount = prompt_input_data("Enter Amount to Withdraw (SOL):");
 
                 show_spinner(
                     self.spinner_msg(),
                     process_withdraw_stake(ctx, &stake_pubkey, &recipient, amount.value()),
                 )
-                .await?;
+                .await;
             }
             StakeCommand::Merge => {
                 let destination_stake_account_pubkey: Pubkey =
-                    prompt_data("Enter Stake Account Pubkey: ")?;
+                    prompt_input_data("Enter Stake Account Pubkey: ");
                 let source_stake_account_pubkey: Pubkey =
-                    prompt_data("Enter Source Stake Account Pubkey: ")?;
+                    prompt_input_data("Enter Source Stake Account Pubkey: ");
                 let stake_authority_keypair_path: PathBuf =
-                    prompt_data("Enter Stake Authority Keypair Path: ")?;
+                    prompt_input_data("Enter Stake Authority Keypair Path: ");
 
                 show_spinner(
                     self.spinner_msg(),
@@ -176,15 +177,16 @@ impl StakeCommand {
                         &stake_authority_keypair_path,
                     ),
                 )
-                .await?;
+                .await;
             }
             StakeCommand::Split => {
-                let stake_account_pubkey: Pubkey = prompt_data("Enter Stake Account Pubkey: ")?;
+                let stake_account_pubkey: Pubkey =
+                    prompt_input_data("Enter Stake Account Pubkey: ");
                 let split_stake_account_pubkey: Pubkey =
-                    prompt_data("Enter Split Stake Account Pubkey: ")?;
+                    prompt_input_data("Enter Split Stake Account Pubkey: ");
                 let stake_authority_keypair_path: PathBuf =
-                    prompt_data("Enter Stake Authority Keypair Path: ")?;
-                let amount_to_split: f64 = prompt_data("Enter Stake Amount (SOL) to Split: ")?;
+                    prompt_input_data("Enter Stake Authority Keypair Path: ");
+                let amount_to_split: f64 = prompt_input_data("Enter Stake Amount (SOL) to Split: ");
 
                 show_spinner(
                     self.spinner_msg(),
@@ -196,17 +198,17 @@ impl StakeCommand {
                         amount_to_split,
                     ),
                 )
-                .await?;
+                .await;
             }
             StakeCommand::Show => todo!(),
             StakeCommand::History => {
-                show_spinner(self.spinner_msg(), process_stake_history(ctx)).await?;
+                show_spinner(self.spinner_msg(), process_stake_history(ctx)).await;
             }
 
-            StakeCommand::GoBack => return Ok(CommandExec::GoBack),
+            StakeCommand::GoBack => return CommandFlow::GoBack,
         }
 
-        Ok(CommandExec::Process(()))
+        CommandFlow::Process(())
     }
 }
 
@@ -711,7 +713,7 @@ async fn process_deactivate_stake_account(
     let signature = build_and_send_tx(ctx, &[instruction], &[ctx.keypair()]).await?;
 
     println!(
-        "\n{} {}\n{}\n{}",
+        "{} {}\n{}\n{}",
         style("Stake Deactivated Successfully!").green().bold(),
         style("(Cooldown will take 1-2 epochs ≈ 2-4 days)").yellow(),
         style(format!("Stake Account: {stake_pubkey}")).yellow(),
@@ -801,7 +803,7 @@ async fn process_withdraw_stake(
     let signature = build_and_send_tx(ctx, &[instruction], &[ctx.keypair()]).await?;
 
     println!(
-        "\n{} {}\n{}\n{}\n{}",
+        "{} {}\n{}\n{}\n{}",
         style("Stake Withdrawn Successfully!").green().bold(),
         style(format!("From Stake Account: {stake_pubkey}")).yellow(),
         style(format!("To Recipient: {recipient}")).yellow(),
@@ -1002,7 +1004,7 @@ async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
         bincode_deserialize_with_limit(account.data.len() as u64, &account.data, "stake history")?;
 
     if stake_history.is_empty() {
-        println!("\n{}", style("No stake history available").yellow());
+        println!("{}", style("No stake history available").yellow());
         return Ok(());
     }
 

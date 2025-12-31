@@ -5,7 +5,6 @@ use {
             stake::StakeCommand, transaction::TransactionCommand, vote::VoteCommand,
         },
         context::ScillaContext,
-        error::ScillaResult,
     },
     console::style,
     std::{
@@ -21,13 +20,13 @@ pub mod stake;
 pub mod transaction;
 pub mod vote;
 
-pub enum CommandExec<T> {
+pub enum CommandFlow<T> {
     Process(T),
     GoBack,
     Exit,
 }
 
-impl<T> Termination for CommandExec<T> {
+impl<T> Termination for CommandFlow<T> {
     fn report(self) -> std::process::ExitCode {
         println!("{}", style("Goodbye 👋").dim());
         ExitCode::SUCCESS
@@ -46,7 +45,7 @@ pub enum Command {
 }
 
 impl Command {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
+    pub async fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow<()> {
         match self {
             Command::Cluster(cluster_command) => cluster_command.process_command(ctx).await,
             Command::Stake(stake_command) => stake_command.process_command(ctx).await,
@@ -55,8 +54,8 @@ impl Command {
             Command::Transaction(transaction_command) => {
                 transaction_command.process_command(ctx).await
             }
-            Command::ScillaConfig(config_command) => config_command.process_command(),
-            Command::Exit => Ok(CommandExec::Exit),
+            Command::ScillaConfig(config_command) => config_command.process_command(ctx),
+            Command::Exit => CommandFlow::Exit,
         }
     }
 }

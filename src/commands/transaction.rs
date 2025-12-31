@@ -1,15 +1,13 @@
 use {
     crate::{
-        commands::CommandExec,
+        commands::CommandFlow,
         context::ScillaContext,
-        error::ScillaResult,
         misc::helpers::{bincode_deserialize, decode_base58, decode_base64},
-        prompt::prompt_data,
+        prompt::{prompt_input_data, prompt_select_data},
         ui::show_spinner,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
-    inquire::Select,
     solana_rpc_client_api::config::RpcTransactionConfig,
     solana_signature::Signature,
     solana_transaction::versioned::VersionedTransaction,
@@ -51,31 +49,31 @@ impl fmt::Display for TransactionCommand {
 }
 
 impl TransactionCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> ScillaResult<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
         match self {
             TransactionCommand::CheckConfirmation => {
-                let signature: Signature = prompt_data("Enter transaction signature:")?;
+                let signature: Signature = prompt_input_data("Enter transaction signature:");
                 show_spinner(
                     self.spinner_msg(),
                     process_check_confirmation(ctx, &signature),
                 )
-                .await?;
+                .await;
             }
             TransactionCommand::FetchStatus => {
-                let signature: Signature = prompt_data("Enter transaction signature:")?;
+                let signature: Signature = prompt_input_data("Enter transaction signature:");
                 show_spinner(
                     self.spinner_msg(),
                     process_fetch_transaction_status(ctx, &signature),
                 )
-                .await?;
+                .await;
             }
             TransactionCommand::FetchTransaction => {
-                let signature: Signature = prompt_data("Enter transaction signature:")?;
+                let signature: Signature = prompt_input_data("Enter transaction signature:");
                 show_spinner(
                     self.spinner_msg(),
                     process_fetch_transaction(ctx, &signature),
                 )
-                .await?;
+                .await;
             }
             TransactionCommand::SendTransaction => {
                 println!(
@@ -85,24 +83,23 @@ impl TransactionCommand {
                         .dim()
                 );
 
-                let encoding = Select::new(
+                let encoding = prompt_select_data(
                     "Select encoding format:",
                     vec![UiTransactionEncoding::Base64, UiTransactionEncoding::Base58],
-                )
-                .prompt()?;
+                );
 
-                let encoded_tx: String = prompt_data("Enter encoded transaction:")?;
+                let encoded_tx: String = prompt_input_data("Enter encoded transaction:");
 
                 show_spinner(
                     self.spinner_msg(),
                     process_send_transaction(ctx, encoding, &encoded_tx),
                 )
-                .await?;
+                .await;
             }
-            TransactionCommand::GoBack => return Ok(CommandExec::GoBack),
+            TransactionCommand::GoBack => return CommandFlow::GoBack,
         }
 
-        Ok(CommandExec::Process(()))
+        CommandFlow::Process(())
     }
 }
 
@@ -312,7 +309,7 @@ async fn process_send_transaction(
     let signature = ctx.rpc().send_transaction(&tx).await?;
 
     println!(
-        "\n{} {}",
+        "{} {}",
         style("Transaction sent successfully!").green().bold(),
         style(signature).cyan()
     );
