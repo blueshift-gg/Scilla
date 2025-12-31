@@ -11,7 +11,7 @@ use {
             check_minimum_balance, fetch_account_with_epoch, lamports_to_sol,
             read_keypair_from_path, sol_to_lamports,
         },
-        prompt::prompt_input_data,
+        prompt::{prompt_data, prompt_keypair_path},
         ui::show_spinner,
     },
     anyhow::{anyhow, bail},
@@ -165,8 +165,8 @@ impl StakeCommand {
                     prompt_input_data("Enter Stake Account Pubkey: ");
                 let source_stake_account_pubkey: Pubkey =
                     prompt_input_data("Enter Source Stake Account Pubkey: ");
-                let stake_authority_keypair_path: PathBuf =
-                    prompt_input_data("Enter Stake Authority Keypair Path: ");
+                let stake_authority_keypair_path =
+                    prompt_input_keypair_path("Enter Stake Authority Keypair Path: ");
 
                 show_spinner(
                     self.spinner_msg(),
@@ -184,8 +184,8 @@ impl StakeCommand {
                     prompt_input_data("Enter Stake Account Pubkey: ");
                 let split_stake_account_pubkey: Pubkey =
                     prompt_input_data("Enter Split Stake Account Pubkey: ");
-                let stake_authority_keypair_path: PathBuf =
-                    prompt_input_data("Enter Stake Authority Keypair Path: ");
+                let stake_authority_keypair_path =
+                    prompt_input_keypair_path("Enter Stake Authority Keypair Path: ");
                 let amount_to_split: f64 = prompt_input_data("Enter Stake Amount (SOL) to Split: ");
 
                 show_spinner(
