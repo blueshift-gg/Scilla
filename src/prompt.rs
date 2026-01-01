@@ -193,21 +193,17 @@ where
     }
 }
 
-pub fn prompt_keypair_path(msg: &str) -> PathBuf {
+pub fn prompt_keypair_path(msg: &str) -> anyhow::Result<PathBuf> {
     let default_path = ScillaConfig::load()
-        .ok()
         .map(|config| config.keypair_path.display().to_string())
-        .unwrap_or_default();
+        .map_err(|e| anyhow::anyhow!("Failed to load ScillaConfig: {}", e))?;
 
     loop {
-        let input = match if default_path.is_empty() {
-            Text::new(msg).prompt()
-        } else {
-            Text::new(msg)
-                .with_default(&default_path)
-                .with_help_message("Press Enter to use the default keypair")
-                .prompt()
-        } {
+        let input = match Text::new(msg)
+            .with_default(&default_path)
+            .with_help_message("Press Enter to use the default keypair")
+            .prompt()
+        {
             Ok(v) => v,
             Err(e) => match e {
                 InquireError::OperationInterrupted | InquireError::OperationCanceled => {
@@ -221,14 +217,14 @@ pub fn prompt_keypair_path(msg: &str) -> PathBuf {
             },
         };
 
-        let input = if input.trim().is_empty() && !default_path.is_empty() {
-            default_path.clone()
+        let input = if input.trim().is_empty() {
+            &default_path
         } else {
-            input
+            &input
         };
 
-        match PathBuf::from_str(&input) {
-            Ok(value) => return value,
+        match PathBuf::from_str(input) {
+            Ok(value) => return Ok(value),
             Err(e) => {
                 print_error(format!("Invalid path: {e}. Please try again."));
             }

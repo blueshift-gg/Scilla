@@ -32,7 +32,7 @@ use {
         state::{Authorized, Lockup, Meta, StakeActivationStatus, StakeStateV2},
     },
     solana_sysvar::clock,
-    std::{fmt, ops::Div, path::PathBuf},
+    std::{fmt, ops::Div, path::PathBuf, process::exit},
 };
 
 /// Commands related to staking operations
@@ -87,10 +87,18 @@ impl StakeCommand {
         match self {
             StakeCommand::Create => {
                 let stake_account_keypair_path: PathBuf =
-                    prompt_keypair_path("Enter Stake Account Keypair Path: ");
+                    prompt_keypair_path("Enter Stake Account Keypair Path: ").unwrap_or_else(|e| {
+                        eprintln!("{}", e);
+                        exit(1);
+                    });
                 let amount_sol: SolAmount = prompt_input_data("Enter amount to stake (in SOL):");
-                let withdraw_authority_keypair_path: PathBuf =
-                    prompt_keypair_path("Enter Withdraw Authority Keypair Path: ");
+                let withdraw_authority_keypair_path: PathBuf = prompt_keypair_path(
+                    "Enter Withdraw Authority Keypair Path: ",
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    exit(1);
+                });
                 let configure_lockup: bool =
                     prompt_input_data("Would you like to set up lockup configuration? (y/n): ");
 
@@ -125,8 +133,13 @@ impl StakeCommand {
                 let stake_account_pubkey: Pubkey =
                     prompt_input_data("Enter Stake Account Pubkey: ");
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Pubkey: ");
-                let stake_authority_keypair_path: PathBuf =
-                    prompt_keypair_path("Enter Stake Authority Keypair Path: ");
+                let stake_authority_keypair_path: PathBuf = prompt_keypair_path(
+                    "Enter Stake Authority Keypair Path: ",
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    exit(1);
+                });
 
                 show_spinner(
                     self.spinner_msg(),
@@ -165,8 +178,13 @@ impl StakeCommand {
                     prompt_input_data("Enter Stake Account Pubkey: ");
                 let source_stake_account_pubkey: Pubkey =
                     prompt_input_data("Enter Source Stake Account Pubkey: ");
-                let stake_authority_keypair_path =
-                    prompt_keypair_path("Enter Stake Authority Keypair Path: ");
+                let stake_authority_keypair_path = prompt_keypair_path(
+                    "Enter Stake Authority Keypair Path: ",
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    exit(1);
+                });
 
                 show_spinner(
                     self.spinner_msg(),
@@ -184,8 +202,13 @@ impl StakeCommand {
                     prompt_input_data("Enter Stake Account Pubkey: ");
                 let split_stake_account_pubkey: Pubkey =
                     prompt_input_data("Enter Split Stake Account Pubkey: ");
-                let stake_authority_keypair_path =
-                    prompt_keypair_path("Enter Stake Authority Keypair Path: ");
+                let stake_authority_keypair_path = prompt_keypair_path(
+                    "Enter Stake Authority Keypair Path: ",
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    exit(1);
+                });
                 let amount_to_split: f64 = prompt_input_data("Enter Stake Amount (SOL) to Split: ");
 
                 show_spinner(

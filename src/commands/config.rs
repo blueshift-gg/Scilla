@@ -180,7 +180,7 @@ pub fn generate_config() -> anyhow::Result<()> {
             };
 
         let keypair_path = loop {
-            let keypair_input = prompt_keypair_path("Enter keypair path:");
+            let keypair_input = prompt_keypair_path("Enter keypair path:")?;
 
             if !keypair_input.exists() {
                 println!(
@@ -260,7 +260,7 @@ fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
             config.commitment_level = level
         }
         ConfigField::KeypairPath => loop {
-            let keypair_input = prompt_keypair_path("Enter new keypair path:");
+            let keypair_input = prompt_keypair_path("Enter new keypair path:")?;
 
             if !keypair_input.exists() {
                 println!(
