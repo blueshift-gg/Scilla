@@ -5,11 +5,12 @@ use {
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
             vote::VoteCommand,
         },
+        config::ScillaConfig,
         ui::print_error,
     },
     console::style,
     inquire::{InquireError, Select, Text},
-    std::{fmt::Display, process::exit, str::FromStr},
+    std::{fmt::Display, path::PathBuf, process::exit, str::FromStr},
 };
 pub fn prompt_for_command() -> anyhow::Result<Command> {
     let top_level = Select::new(
@@ -192,20 +193,32 @@ where
     }
 }
 
-pub fn prompt_keypair_path(msg: &str) -> anyhow::Result<PathBuf> {
+pub fn prompt_keypair_path(msg: &str) -> PathBuf {
     let default_path = ScillaConfig::load()
         .ok()
         .map(|config| config.keypair_path.display().to_string())
         .unwrap_or_default();
 
     loop {
-        let input = if default_path.is_empty() {
-            Text::new(msg).prompt()?
+        let input = match if default_path.is_empty() {
+            Text::new(msg).prompt()
         } else {
             Text::new(msg)
                 .with_default(&default_path)
                 .with_help_message("Press Enter to use the default keypair")
-                .prompt()?
+                .prompt()
+        } {
+            Ok(v) => v,
+            Err(e) => match e {
+                InquireError::OperationInterrupted | InquireError::OperationCanceled => {
+                    println!("{}", style("Operation cancelled. Exiting.").yellow().bold());
+                    exit(0);
+                }
+                _ => {
+                    print_error(format!("Invalid input: {e}. Please try again."));
+                    continue;
+                }
+            },
         };
 
         let input = if input.trim().is_empty() && !default_path.is_empty() {
@@ -215,9 +228,9 @@ pub fn prompt_keypair_path(msg: &str) -> anyhow::Result<PathBuf> {
         };
 
         match PathBuf::from_str(&input) {
-            Ok(value) => return Ok(value),
+            Ok(value) => return value,
             Err(e) => {
-                eprintln!("Invalid input: {}. Please try again.\n", e);
+                print_error(format!("Invalid path: {e}. Please try again."));
             }
         }
     }

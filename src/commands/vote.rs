@@ -19,7 +19,7 @@ use {
         instruction::{CreateVoteAccountConfig, authorize, create_account_with_config, withdraw},
         state::{VoteAuthorize, VoteInit, VoteStateV4},
     },
-    std::fmt,
+    std::{fmt, path::PathBuf},
 };
 
 /// Commands related to validator/vote account operations
@@ -65,11 +65,9 @@ impl VoteCommand {
         match self {
             VoteCommand::CreateVoteAccount => {
                 let vote_account_keypair_path =
-                    prompt_input_keypair_path("Enter Vote Account Keypair Path:");
-                let identity_keypair_path =
-                    prompt_input_keypair_path("Enter Identity Keypair Path:");
-                let withdraw_keypair_path =
-                    prompt_input_keypair_path("Enter Withdraw Keypair Path:");
+                    prompt_keypair_path("Enter Vote Account Keypair Path:");
+                let identity_keypair_path = prompt_keypair_path("Enter Identity Keypair Path:");
+                let withdraw_keypair_path = prompt_keypair_path("Enter Withdraw Keypair Path:");
                 let commission: Commission =
                     prompt_input_data("Enter Commission 0-100 (default 0):");
 
@@ -87,8 +85,7 @@ impl VoteCommand {
             }
             VoteCommand::AuthorizeVoter => {
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Address:");
-                let authorized_keypair_path =
-                    prompt_input_keypair_path("Enter Authorized Keypair Path:");
+                let authorized_keypair_path = prompt_keypair_path("Enter Authorized Keypair Path:");
                 let new_authorized_pubkey: Pubkey =
                     prompt_input_data("Enter New Authorized Address:");
 
@@ -106,7 +103,7 @@ impl VoteCommand {
             VoteCommand::WithdrawFromVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Address:");
                 let authorized_withdrawer_keypair_path =
-                    prompt_input_keypair_path("Enter Authorized Withdraw Keypair Path:");
+                    prompt_keypair_path("Enter Authorized Withdraw Keypair Path:");
                 let recipient_address: Pubkey = prompt_input_data("Enter Recipient Address:");
 
                 let amount: SolAmount = prompt_input_data("Enter withdraw amount in SOL:");
@@ -134,7 +131,7 @@ impl VoteCommand {
             VoteCommand::CloseVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Address:");
                 let withdraw_authority_keypair_path =
-                    prompt_input_keypair_path("Enter Withdraw Authority Keypair Path:");
+                    prompt_keypair_path("Enter Withdraw Authority Keypair Path:");
                 let destination_pubkey: Pubkey = prompt_input_data("Enter Destination Address:");
 
                 show_spinner(
