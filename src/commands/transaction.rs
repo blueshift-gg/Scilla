@@ -138,17 +138,14 @@ async fn process_fetch_transaction_status(
     ctx: &ScillaContext,
     signature: &Signature,
 ) -> anyhow::Result<()> {
-    let tx = ctx
+    let status = ctx
         .rpc()
-        .get_transaction_with_config(
-            signature,
-            RpcTransactionConfig {
-                encoding: Some(UiTransactionEncoding::JsonParsed),
-                commitment: Some(ctx.rpc().commitment()),
-                max_supported_transaction_version: Some(0),
-            },
-        )
+        .get_signature_statuses_with_history(&[*signature])
         .await?;
+
+    let Some(Some(tx_status)) = status.value.first() else {
+        anyhow::bail!("Transaction not found");
+    };
 
     let mut table = Table::new();
     table
@@ -157,24 +154,45 @@ async fn process_fetch_transaction_status(
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![
-            Cell::new("Signature"),
-            Cell::new(signature),
-        ])
-        .add_row(vec![Cell::new("Slot"), Cell::new(tx.slot)]);
+        .add_row(vec![Cell::new("Signature"), Cell::new(signature)])
+        .add_row(vec![Cell::new("Slot"), Cell::new(tx_status.slot)]);
 
-    if let Some(meta) = &tx.transaction.meta {
+    if let Some(confirmations) = tx_status.confirmations {
+        table.add_row(vec![Cell::new("Confirmations"), Cell::new(confirmations)]);
+    } else {
         table.add_row(vec![
-            Cell::new("Status"),
-            Cell::new(if meta.err.is_none() {
-                style("Success").green().to_string()
-            } else {
-                style(format!("Error: {:?}", meta.err)).red().to_string()
+            Cell::new("Confirmations"),
+            Cell::new(style("Finalized").green()),
+        ]);
+    }
+
+    if let Some(confirmation_status) = &tx_status.confirmation_status {
+        table.add_row(vec![
+            Cell::new("Confirmation Status"),
+            Cell::new(match confirmation_status {
+                solana_transaction_status::TransactionConfirmationStatus::Processed => {
+                    style("Processed").yellow().to_string()
+                }
+                solana_transaction_status::TransactionConfirmationStatus::Confirmed => {
+                    style("Confirmed").cyan().to_string()
+                }
+                solana_transaction_status::TransactionConfirmationStatus::Finalized => {
+                    style("Finalized").green().to_string()
+                }
             }),
         ]);
-    } else {
-        table.add_row(vec![Cell::new("Status"), Cell::new("Unknown")]);
     }
+
+    table.add_row(vec![
+        Cell::new("Status"),
+        Cell::new(if tx_status.err.is_none() {
+            style("Success").green().to_string()
+        } else {
+            style(format!("Error: {:?}", tx_status.err))
+                .red()
+                .to_string()
+        }),
+    ]);
 
     println!("\n{}", style("TRANSACTION STATUS").green().bold());
     println!("{}", table);
