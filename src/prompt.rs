@@ -5,7 +5,6 @@ use {
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
             vote::VoteCommand,
         },
-        constants::DEFAULT_KEYPAIR_PATH,
         context::ScillaContext,
         ui::print_error,
     },
@@ -194,14 +193,8 @@ where
     }
 }
 
-pub fn prompt_keypair_path(msg: &str, ctx: Option<&ScillaContext>) -> anyhow::Result<PathBuf> {
-    let default_path = if let Some(context) = ctx {
-        context.keypair_path().display().to_string()
-    } else {
-        dirs::home_dir()
-            .map(|home| home.join(DEFAULT_KEYPAIR_PATH).display().to_string())
-            .unwrap_or_else(|| DEFAULT_KEYPAIR_PATH.to_string())
-    };
+pub fn prompt_keypair_path(msg: &str, ctx: &ScillaContext) -> PathBuf {
+    let default_path = ctx.keypair_path().display().to_string();
 
     loop {
         let input = match Text::new(msg)
@@ -229,7 +222,7 @@ pub fn prompt_keypair_path(msg: &str, ctx: Option<&ScillaContext>) -> anyhow::Re
         };
 
         match PathBuf::from_str(input) {
-            Ok(value) => return Ok(value),
+            Ok(value) => return value,
             Err(e) => {
                 print_error(format!("Invalid path: {e}. Please try again."));
             }

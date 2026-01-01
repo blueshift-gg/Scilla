@@ -11,7 +11,7 @@ use {
     inquire::{Confirm, Select},
     serde::{Deserialize, Serialize},
     solana_commitment_config::CommitmentLevel,
-    std::{fmt, fs},
+    std::{fmt, fs, path::PathBuf},
 };
 
 /// Commands related to configuration like RPC_URL , KEYAPAIR_PATH etc
@@ -180,7 +180,7 @@ pub fn generate_config() -> anyhow::Result<()> {
             };
 
         let keypair_path = loop {
-            let keypair_input = prompt_keypair_path("Enter keypair path:", None)?;
+            let keypair_input: PathBuf = prompt_input_data("Enter keypair path:");
 
             if !keypair_input.exists() {
                 println!(
@@ -260,7 +260,7 @@ fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
             config.commitment_level = level
         }
         ConfigField::KeypairPath => loop {
-            let keypair_input = prompt_keypair_path("Enter new keypair path:", Some(ctx))?;
+            let keypair_input = prompt_keypair_path("Enter new keypair path:", ctx);
 
             if !keypair_input.exists() {
                 println!(
