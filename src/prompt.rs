@@ -176,7 +176,7 @@ where
     T: Display + Clone,
 {
     loop {
-        match Select::new(&msg, options.clone()).prompt() {
+        match Select::new(msg, options.clone()).prompt() {
             Ok(v) => return v,
             Err(e) => match e {
                 InquireError::OperationInterrupted | InquireError::OperationCanceled => {

@@ -22,7 +22,7 @@ where
         Ok(_) => spinner.finish_with_message("✅ Done"),
         Err(e) => spinner.finish_with_message(format!(
             "{}",
-            style(format!("Error : {}", e.to_string())).red().bold()
+            style(format!("Error : {}", e)).red().bold()
         )),
     }
 }

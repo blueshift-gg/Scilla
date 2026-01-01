@@ -162,9 +162,9 @@ async fn process_create_vote_account(
     withdraw_keypair_path: &PathBuf,
     commission: u8,
 ) -> anyhow::Result<()> {
-    let vote_account_keypair = read_keypair_from_path(&vote_account_keypair_path)?;
-    let identity_keypair = read_keypair_from_path(&identity_keypair_path)?;
-    let withdraw_keypair = read_keypair_from_path(&withdraw_keypair_path)?;
+    let vote_account_keypair = read_keypair_from_path(vote_account_keypair_path)?;
+    let identity_keypair = read_keypair_from_path(identity_keypair_path)?;
+    let withdraw_keypair = read_keypair_from_path(withdraw_keypair_path)?;
     let vote_account_pubkey = vote_account_keypair.pubkey();
     let identity_pubkey = identity_keypair.pubkey();
     let withdrawer_pubkey = withdraw_keypair.pubkey();
@@ -239,7 +239,7 @@ async fn process_authorize_voter(
     authorized_keypair_path: &PathBuf,
     new_authorized_pubkey: &Pubkey,
 ) -> anyhow::Result<()> {
-    let authorized = read_keypair_from_path(&authorized_keypair_path)?;
+    let authorized = read_keypair_from_path(authorized_keypair_path)?;
     let authorized_pubkey = authorized.pubkey();
 
     let (vote_account, epoch_info) = fetch_account_with_epoch(ctx, vote_account_pubkey).await?;
@@ -294,7 +294,7 @@ async fn process_sol_withdraw_from_vote_account(
     recipient_address: &Pubkey,
     amount: u64,
 ) -> anyhow::Result<()> {
-    let authorized_withdrawer = read_keypair_from_path(&authorized_withdrawer_keypair_path)?;
+    let authorized_withdrawer = read_keypair_from_path(authorized_withdrawer_keypair_path)?;
     let withdrawer_pubkey = authorized_withdrawer.pubkey();
 
     let vote_account = ctx
@@ -347,7 +347,7 @@ async fn close_vote_account(
     withdraw_authority_keypair_path: &PathBuf,
     destination_pubkey: &Pubkey,
 ) -> anyhow::Result<()> {
-    let withdraw_authority = read_keypair_from_path(&withdraw_authority_keypair_path)?;
+    let withdraw_authority = read_keypair_from_path(withdraw_authority_keypair_path)?;
     let vote_account_status = ctx
         .rpc()
         .get_vote_accounts_with_config(RpcGetVoteAccountsConfig {
