@@ -138,7 +138,6 @@ async fn fetch_epoch_info(ctx: &ScillaContext) -> anyhow::Result<()> {
 
     println!("\n{}", style("EPOCH INFORMATION").green().bold());
     println!("{table}");
-    println!();
 
     Ok(())
 }
