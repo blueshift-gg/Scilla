@@ -3,7 +3,7 @@ use {
         commands::CommandFlow,
         config::{ScillaConfig, scilla_config_path},
         context::ScillaContext,
-        prompt::prompt_input_data,
+        prompt::{prompt_input_data, prompt_keypair_path},
         ui::print_error,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
@@ -179,17 +179,8 @@ pub fn generate_config() -> anyhow::Result<()> {
                 UICommitmentOptions::None => return Ok(()),
             };
 
-        let default_keypair_path = ScillaConfig::default().keypair_path;
-
         let keypair_path = loop {
-            let keypair_input: PathBuf = prompt_input_data(&format!(
-                "Enter keypair path (press Enter to use default: {}): ",
-                default_keypair_path.display()
-            ));
-
-            if keypair_input.as_os_str().is_empty() {
-                break default_keypair_path;
-            }
+            let keypair_input: PathBuf = prompt_input_data("Enter keypair path:");
 
             if !keypair_input.exists() {
                 println!(
@@ -268,36 +259,24 @@ fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
 
             config.commitment_level = level
         }
-        ConfigField::KeypairPath => {
-            let default_keypair_path = &ScillaConfig::default().keypair_path;
+        ConfigField::KeypairPath => loop {
+            let keypair_input = prompt_keypair_path("Enter new keypair path:", ctx);
 
-            loop {
-                let keypair_input: PathBuf = prompt_input_data(&format!(
-                    "Enter new keypair path (leave empty to use default: {}): ",
-                    default_keypair_path.display()
-                ));
-
-                if keypair_input.as_os_str().is_empty() {
-                    config.keypair_path = default_keypair_path.to_path_buf();
-                    break;
-                }
-
-                if !keypair_input.exists() {
-                    println!(
-                        "{}",
-                        style(format!(
-                            "Keypair file not found at: {}",
-                            keypair_input.display()
-                        ))
-                        .red()
-                    );
-                    continue;
-                }
-
-                config.keypair_path = keypair_input;
-                break;
+            if !keypair_input.exists() {
+                println!(
+                    "{}",
+                    style(format!(
+                        "Keypair file not found at: {}",
+                        keypair_input.display()
+                    ))
+                    .red()
+                );
+                continue;
             }
-        }
+
+            config.keypair_path = keypair_input;
+            break;
+        },
         ConfigField::None => return Ok(()),
     }
 

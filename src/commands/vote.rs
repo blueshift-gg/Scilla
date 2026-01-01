@@ -6,7 +6,7 @@ use {
             Commission, SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
             read_keypair_from_path,
         },
-        prompt::prompt_input_data,
+        prompt::{prompt_input_data, prompt_keypair_path},
         ui::show_spinner,
     },
     anyhow::{anyhow, bail},
@@ -64,12 +64,12 @@ impl VoteCommand {
     pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
         match self {
             VoteCommand::CreateVoteAccount => {
-                let vote_account_keypair_path: PathBuf =
-                    prompt_input_data("Enter Vote Account Keypair Path:");
-                let identity_keypair_path: PathBuf =
-                    prompt_input_data("Enter Identity Keypair Path:");
-                let withdraw_keypair_path: PathBuf =
-                    prompt_input_data("Enter Withdraw Keypair Path:");
+                let vote_account_keypair_path =
+                    prompt_keypair_path("Enter Vote Account Keypair Path:", ctx);
+                let identity_keypair_path =
+                    prompt_keypair_path("Enter Identity Keypair Path:", ctx);
+                let withdraw_keypair_path =
+                    prompt_keypair_path("Enter Withdraw Keypair Path:", ctx);
                 let commission: Commission =
                     prompt_input_data("Enter Commission 0-100 (default 0):");
 
@@ -87,8 +87,8 @@ impl VoteCommand {
             }
             VoteCommand::AuthorizeVoter => {
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Address:");
-                let authorized_keypair_path: PathBuf =
-                    prompt_input_data("Enter Authorized Keypair Path:");
+                let authorized_keypair_path =
+                    prompt_keypair_path("Enter Authorized Keypair Path:", ctx);
                 let new_authorized_pubkey: Pubkey =
                     prompt_input_data("Enter New Authorized Address:");
 
@@ -105,8 +105,8 @@ impl VoteCommand {
             }
             VoteCommand::WithdrawFromVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Address:");
-                let authorized_withdrawer_keypair_path: PathBuf =
-                    prompt_input_data("Enter Authorized Withdraw Keypair Path:");
+                let authorized_withdrawer_keypair_path =
+                    prompt_keypair_path("Enter Authorized Withdraw Keypair Path:", ctx);
                 let recipient_address: Pubkey = prompt_input_data("Enter Recipient Address:");
 
                 let amount: SolAmount = prompt_input_data("Enter withdraw amount in SOL:");
@@ -133,8 +133,8 @@ impl VoteCommand {
             }
             VoteCommand::CloseVoteAccount => {
                 let vote_account_pubkey: Pubkey = prompt_input_data("Enter Vote Account Address:");
-                let withdraw_authority_keypair_path: PathBuf =
-                    prompt_input_data("Enter Withdraw Authority Keypair Path:");
+                let withdraw_authority_keypair_path =
+                    prompt_keypair_path("Enter Withdraw Authority Keypair Path:", ctx);
                 let destination_pubkey: Pubkey = prompt_input_data("Enter Destination Address:");
 
                 show_spinner(

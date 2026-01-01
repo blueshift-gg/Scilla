@@ -5,11 +5,12 @@ use {
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
             vote::VoteCommand,
         },
+        context::ScillaContext,
         ui::print_error,
     },
     console::style,
     inquire::{InquireError, Select, Text},
-    std::{fmt::Display, process::exit, str::FromStr},
+    std::{fmt::Display, path::PathBuf, process::exit, str::FromStr},
 };
 pub fn prompt_for_command() -> anyhow::Result<Command> {
     let top_level = Select::new(
@@ -188,6 +189,43 @@ where
                     continue;
                 }
             },
+        }
+    }
+}
+
+pub fn prompt_keypair_path(msg: &str, ctx: &ScillaContext) -> PathBuf {
+    let default_path = ctx.keypair_path().display().to_string();
+
+    loop {
+        let input = match Text::new(msg)
+            .with_default(&default_path)
+            .with_help_message("Press Enter to use the default keypair")
+            .prompt()
+        {
+            Ok(v) => v,
+            Err(e) => match e {
+                InquireError::OperationInterrupted | InquireError::OperationCanceled => {
+                    println!("{}", style("Operation cancelled. Exiting.").yellow().bold());
+                    exit(0);
+                }
+                _ => {
+                    print_error(format!("Invalid input: {e}. Please try again."));
+                    continue;
+                }
+            },
+        };
+
+        let input = if input.trim().is_empty() {
+            &default_path
+        } else {
+            &input
+        };
+
+        match PathBuf::from_str(input) {
+            Ok(value) => return value,
+            Err(e) => {
+                print_error(format!("Invalid path: {e}. Please try again."));
+            }
         }
     }
 }
