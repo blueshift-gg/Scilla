@@ -20,10 +20,9 @@ where
 
     match &result {
         Ok(_) => spinner.finish_with_message("✅ Done"),
-        Err(e) => spinner.finish_with_message(format!(
-            "{}",
-            style(format!("Error : {}", e)).red().bold()
-        )),
+        Err(e) => {
+            spinner.finish_with_message(format!("{}", style(format!("Error : {}", e)).red().bold()))
+        }
     }
 }
 

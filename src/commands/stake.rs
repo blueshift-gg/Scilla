@@ -90,7 +90,7 @@ impl StakeCommand {
                     prompt_input_data("Enter Stake Account Keypair Path: ");
                 let amount_sol: SolAmount = prompt_input_data("Enter amount to stake (in SOL):");
                 let withdraw_authority_keypair_path: PathBuf =
-                    prompt_input_data("Enter Withdraw Authority Keypair Path: ")?;
+                    prompt_input_data("Enter Withdraw Authority Keypair Path: ");
                 let configure_lockup: bool =
                     prompt_input_data("Would you like to set up lockup configuration? (y/n): ");
 
