@@ -5,7 +5,8 @@ use {
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
             vote::VoteCommand,
         },
-        config::ScillaConfig,
+        constants::DEFAULT_KEYPAIR_PATH,
+        context::ScillaContext,
         ui::print_error,
     },
     console::style,
@@ -193,10 +194,14 @@ where
     }
 }
 
-pub fn prompt_keypair_path(msg: &str) -> anyhow::Result<PathBuf> {
-    let default_path = ScillaConfig::load()
-        .map(|config| config.keypair_path.display().to_string())
-        .map_err(|e| anyhow::anyhow!("Failed to load ScillaConfig: {}", e))?;
+pub fn prompt_keypair_path(msg: &str, ctx: Option<&ScillaContext>) -> anyhow::Result<PathBuf> {
+    let default_path = if let Some(context) = ctx {
+        context.keypair_path().display().to_string()
+    } else {
+        dirs::home_dir()
+            .map(|home| home.join(DEFAULT_KEYPAIR_PATH).display().to_string())
+            .unwrap_or_else(|| DEFAULT_KEYPAIR_PATH.to_string())
+    };
 
     loop {
         let input = match Text::new(msg)

@@ -5,12 +5,14 @@ use {
     solana_keypair::{EncodableKey, Keypair, Signer},
     solana_pubkey::Pubkey,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
+    std::path::PathBuf,
 };
 
 pub struct ScillaContext {
     rpc_client: RpcClient,
     keypair: Keypair,
     pubkey: Pubkey,
+    keypair_path: PathBuf,
 }
 
 impl ScillaContext {
@@ -24,6 +26,10 @@ impl ScillaContext {
 
     pub fn pubkey(&self) -> &Pubkey {
         &self.pubkey
+    }
+
+    pub fn keypair_path(&self) -> &PathBuf {
+        &self.keypair_path
     }
 
     pub fn reload(&mut self, new_config: ScillaConfig) -> anyhow::Result<()> {
@@ -55,9 +61,9 @@ impl TryFrom<ScillaConfig> for ScillaContext {
 
         Ok(Self {
             rpc_client,
-
             keypair,
             pubkey,
+            keypair_path: config.keypair_path,
         })
     }
 }
