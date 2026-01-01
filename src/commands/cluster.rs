@@ -94,6 +94,12 @@ impl ClusterCommand {
 async fn fetch_epoch_info(ctx: &ScillaContext) -> anyhow::Result<()> {
     let epoch_info = ctx.rpc().get_epoch_info().await?;
 
+    let epoch_progress = if epoch_info.slots_in_epoch > 0 {
+        (epoch_info.slot_index as f64 / epoch_info.slots_in_epoch as f64) * 100.0
+    } else {
+        0.0
+    };
+
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
@@ -104,6 +110,10 @@ async fn fetch_epoch_info(ctx: &ScillaContext) -> anyhow::Result<()> {
         .add_row(vec![
             Cell::new("Epoch"),
             Cell::new(format!("{}", epoch_info.epoch)),
+        ])
+        .add_row(vec![
+            Cell::new("Epoch Progress"),
+            Cell::new(format!("{:.2}%", epoch_progress)),
         ])
         .add_row(vec![
             Cell::new("Slot Index"),
@@ -128,6 +138,7 @@ async fn fetch_epoch_info(ctx: &ScillaContext) -> anyhow::Result<()> {
 
     println!("\n{}", style("EPOCH INFORMATION").green().bold());
     println!("{table}");
+    println!();
 
     Ok(())
 }
