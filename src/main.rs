@@ -14,6 +14,7 @@ pub mod error;
 pub mod misc;
 pub mod prompt;
 pub mod ui;
+pub mod types;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ScillaResult<()> {
