@@ -8,18 +8,16 @@ use {
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
+    inquire::Confirm,
+    serde_json::Value,
+    solana_pubkey::Pubkey,
     solana_rpc_client_api::config::RpcTransactionConfig,
     solana_signature::Signature,
     solana_transaction::versioned::VersionedTransaction,
     solana_transaction_status::{
-        EncodedTransaction, 
-        UiMessage, 
-        UiTransactionEncoding,
-        UiInstruction,
-        UiParsedInstruction,
+        EncodedTransaction, UiInstruction, UiMessage, UiParsedInstruction, UiTransactionEncoding,
     },
-    std::fmt,
-    serde_json::Value,
+    std::{collections::HashMap, fmt, path::PathBuf, str::FromStr},
 };
 
 #[derive(Debug, Clone)]
@@ -110,9 +108,22 @@ impl TransactionCommand {
             TransactionCommand::ParseInstruction => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
 
+                let use_custom_idl = Confirm::new("Use custom IDL path for this parse?")
+                    .with_default(false)
+                    .prompt()
+                    .unwrap_or(false);
+
+                let custom_idl_path = if use_custom_idl {
+                    Some(prompt_input_data::<String>(
+                        "Enter IDL file path (or directory):",
+                    ))
+                } else {
+                    None
+                };
+
                 show_spinner(
                     self.spinner_msg(),
-                    process_parse_instruction(ctx, &signature),
+                    process_parse_instruction(ctx, &signature, custom_idl_path),
                 )
                 .await;
             }
@@ -337,10 +348,10 @@ async fn process_send_transaction(
     Ok(())
 }
 
-
 async fn process_parse_instruction(
     ctx: &ScillaContext,
     signature: &Signature,
+    custom_idl_path: Option<String>,
 ) -> anyhow::Result<()> {
     // Fetch the transaction with JsonParsed encoding
     let tx = ctx
@@ -374,27 +385,43 @@ async fn process_parse_instruction(
         style(format!("{} instruction(s)", parsed_msg.instructions.len())).cyan()
     );
 
-    // Display each instruction
-    for (idx, ui_instruction) in parsed_msg.instructions.iter().enumerate() {
-        display_ui_instruction(idx, ui_instruction)?;
-    }
+    let config = crate::config::ScillaConfig::load()?;
+
+    let idl_parser = if let Some(custom_path) = custom_idl_path {
+    IdlParser::new_with_custom_path(&custom_path)
+} else {
+    IdlParser::new(&config.idl)
+};
+
+// Display each instruction
+for (idx, ui_instruction) in parsed_msg.instructions.iter().enumerate() {
+    display_ui_instruction_with_idl(idx, ui_instruction, &idl_parser).await?;
+}
 
     Ok(())
 }
-
-fn display_ui_instruction(idx: usize, ui_instruction: &UiInstruction) -> anyhow::Result<()> {
+async fn display_ui_instruction_with_idl(
+    idx: usize,
+    ui_instruction: &UiInstruction,
+    idl_parser: &IdlParser,
+) -> anyhow::Result<()> {
     println!("\n{}", style(format!("INSTRUCTION #{}", idx)).cyan().bold());
 
     match ui_instruction {
         UiInstruction::Parsed(ui_parsed_ix) => {
-      
             match ui_parsed_ix {
                 UiParsedInstruction::Parsed(parsed_ix) => {
-                   
                     display_parsed_instruction(parsed_ix)
                 }
                 UiParsedInstruction::PartiallyDecoded(partial_ix) => {
-                    display_partially_decoded_instruction(partial_ix)
+                    let program_id = Pubkey::from_str(&partial_ix.program_id)?;
+                    let instruction_data = bs58::decode(&partial_ix.data).into_vec()?;
+
+                    if let Some(custom_data) = idl_parser.try_parse_custom(&program_id, &instruction_data).await {
+                        display_custom_instruction(&program_id, &custom_data)
+                    } else {
+                        display_partially_decoded_instruction(partial_ix)
+                    }
                 }
             }
         }
@@ -405,7 +432,7 @@ fn display_ui_instruction(idx: usize, ui_instruction: &UiInstruction) -> anyhow:
 }
 
 fn display_parsed_instruction(
-    parsed_ix:  &solana_transaction_status::parse_instruction::ParsedInstruction,
+    parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
 ) -> anyhow::Result<()> {
     use serde_json::Value;
 
@@ -435,8 +462,7 @@ fn display_system_instruction(
     ix_type: &str,
     info: Option<&serde_json::Value>,
 ) -> anyhow::Result<()> {
-
-           if let Some(info_val) = info {
+    if let Some(info_val) = info {
         println!("\n{}", style("DEBUG - Full Info:").yellow());
         println!("{}", serde_json::to_string_pretty(info_val)?);
     }
@@ -491,7 +517,10 @@ fn display_system_instruction(
                                 crate::misc::helpers::lamports_to_sol(lamports)
                             )),
                         ])
-                        .add_row(vec![Cell::new("Space"), Cell::new(format!("{} bytes", space))])
+                        .add_row(vec![
+                            Cell::new("Space"),
+                            Cell::new(format!("{} bytes", space)),
+                        ])
                         .add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
                 }
             }
@@ -507,8 +536,6 @@ fn display_system_instruction(
     println!("{}", table);
     Ok(())
 }
-
-
 
 fn display_token_instruction(
     ix_type: &str,
@@ -539,15 +566,19 @@ fn display_token_instruction(
 
                 // Amount - try tokenAmount object first, then fall back to amount field
                 if let Some(token_amount) = info_map.get("tokenAmount") {
-                    if let Some(ui_amount_str) = token_amount.get("uiAmountString").and_then(|v| v.as_str()) {
-                        let decimals = token_amount.get("decimals").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
                         table.add_row(vec![
                             Cell::new("Amount"),
                             Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
                         ]);
                     }
                 } else if let Some(amount_val) = info_map.get("amount") {
-  
                     let amount = if let Some(s) = amount_val.as_str() {
                         s.to_string()
                     } else if let Some(n) = amount_val.as_u64() {
@@ -565,7 +596,8 @@ fn display_token_instruction(
                 }
 
                 // Authority
-                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str()) {
+                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str())
+                {
                     table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
                 } else if let Some(authority) = info_map.get("authority").and_then(|v| v.as_str()) {
                     table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
@@ -595,15 +627,19 @@ fn display_token_instruction(
 
                 // Amount
                 if let Some(token_amount) = info_map.get("tokenAmount") {
-                    if let Some(ui_amount_str) = token_amount.get("uiAmountString").and_then(|v| v.as_str()) {
-                        let decimals = token_amount.get("decimals").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
                         table.add_row(vec![
                             Cell::new("Amount"),
                             Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
                         ]);
                     }
                 } else if let Some(amount_val) = info_map.get("amount") {
-   
                     let amount = if let Some(s) = amount_val.as_str() {
                         s.to_string()
                     } else if let Some(n) = amount_val.as_u64() {
@@ -618,7 +654,10 @@ fn display_token_instruction(
                 // Authority
                 if let Some(authority) = info_map.get("mintAuthority").and_then(|v| v.as_str()) {
                     table.add_row(vec![Cell::new("Mint Authority"), Cell::new(authority)]);
-                } else if let Some(authority) = info_map.get("multisigMintAuthority").and_then(|v| v.as_str()) {
+                } else if let Some(authority) = info_map
+                    .get("multisigMintAuthority")
+                    .and_then(|v| v.as_str())
+                {
                     table.add_row(vec![Cell::new("Mint Authority"), Cell::new(authority)]);
                 }
             }
@@ -632,28 +671,32 @@ fn display_token_instruction(
 
                 // Amount
                 if let Some(token_amount) = info_map.get("tokenAmount") {
-                    if let Some(ui_amount_str) = token_amount.get("uiAmountString").and_then(|v| v.as_str()) {
-                        let decimals = token_amount.get("decimals").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
                         table.add_row(vec![
                             Cell::new("Amount"),
                             Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
                         ]);
                     }
                 } else if let Some(amount_val) = info_map.get("amount") {
-               
                     let amount = if let Some(s) = amount_val.as_str() {
                         s.to_string()
                     } else if let Some(n) = amount_val.as_u64() {
                         n.to_string()
                     } else {
-                    
                         amount_val.to_string()
                     };
                     table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
                 }
 
                 // Authority
-                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str()) {
+                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str())
+                {
                     table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
                 } else if let Some(authority) = info_map.get("authority").and_then(|v| v.as_str()) {
                     table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
@@ -678,8 +721,6 @@ fn display_token_instruction(
 }
 
 fn display_memo_instruction(info: Option<&serde_json::Value>) -> anyhow::Result<()> {
-   
-
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
@@ -700,7 +741,7 @@ fn display_memo_instruction(info: Option<&serde_json::Value>) -> anyhow::Result<
 }
 
 fn display_generic_parsed(
-    parsed_ix:  &solana_transaction_status::parse_instruction::ParsedInstruction,
+    parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
 ) -> anyhow::Result<()> {
     let mut table = Table::new();
     table
@@ -710,7 +751,10 @@ fn display_generic_parsed(
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
         .add_row(vec![Cell::new("Program"), Cell::new(&parsed_ix.program)])
-        .add_row(vec![Cell::new("Program ID"), Cell::new(&parsed_ix.program_id)]);
+        .add_row(vec![
+            Cell::new("Program ID"),
+            Cell::new(&parsed_ix.program_id),
+        ]);
 
     println!("{}", table);
     println!("\n{}", style("Parsed Data:").dim());
@@ -729,12 +773,18 @@ fn display_partially_decoded_instruction(
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![Cell::new("Program ID"), Cell::new(&partial_ix.program_id)])
+        .add_row(vec![
+            Cell::new("Program ID"),
+            Cell::new(&partial_ix.program_id),
+        ])
         .add_row(vec![
             Cell::new("Accounts"),
             Cell::new(partial_ix.accounts.len()),
         ])
-        .add_row(vec![Cell::new("Data (Base58)"), Cell::new(&partial_ix.data)]);
+        .add_row(vec![
+            Cell::new("Data (Base58)"),
+            Cell::new(&partial_ix.data),
+        ]);
 
     println!("{}", table);
 
@@ -759,8 +809,195 @@ fn display_compiled_instruction(
             Cell::new("Accounts"),
             Cell::new(compiled_ix.accounts.len()),
         ])
-        .add_row(vec![Cell::new("Data (Base58)"), Cell::new(&compiled_ix.data)]);
+        .add_row(vec![
+            Cell::new("Data (Base58)"),
+            Cell::new(&compiled_ix.data),
+        ]);
 
     println!("{}", table);
     Ok(())
+}
+
+fn display_custom_instruction(
+    program_id: &Pubkey,
+    custom_data: &CustomInstructionData,
+) -> anyhow::Result<()> {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![Cell::new("Program"), Cell::new(&custom_data.program_name)])
+        .add_row(vec![Cell::new("Program ID"), Cell::new(program_id.to_string())])
+        .add_row(vec![Cell::new("Instruction"), Cell::new(&custom_data.instruction_name)]);
+
+    for (key, value) in &custom_data.args {
+        let display_value = match value {
+            Value::Object(_) | Value::Array(_) => serde_json::to_string_pretty(value)?,
+            _ => value.to_string().trim_matches('"').to_string(),
+        };
+        table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
+    }
+
+    println!("{}", table);
+    Ok(())
+}
+
+
+struct IdlParser {
+    idl_path: PathBuf,
+    is_file: bool,
+}
+
+impl IdlParser {
+    fn new(config: &crate::config::IdlConfig) -> Self {
+        Self {
+            idl_path: config.custom_idl_path.clone(),
+            is_file: false,
+        }
+    }
+
+    fn new_with_custom_path(path: &str) -> Self {
+        let expanded = crate::config::expand_tilde(path);
+        let is_file = expanded.is_file();
+        
+        Self {
+            idl_path: expanded,
+            is_file,
+        }
+    }
+
+    async fn try_parse_custom(
+        &self,
+        program_id: &Pubkey,
+        instruction_data: &[u8],
+    ) -> Option<CustomInstructionData> {
+        let idl_file = if self.is_file {
+            self.idl_path.clone()
+        } else {
+            self.idl_path.join(format!("{}.json", program_id))
+        };
+
+        if !idl_file.exists() {
+            return None;
+        }
+
+        let idl_json = tokio::fs::read_to_string(&idl_file).await.ok()?;
+        let idl: serde_json::Value = serde_json::from_str(&idl_json).ok()?;
+
+        let program_name = idl.get("name")?.as_str()?.to_string();
+
+        if instruction_data.len() < 8 {
+            return None;
+        }
+
+        let discriminator = &instruction_data[0..8];
+
+        let instructions = idl.get("instructions")?.as_array()?;
+
+        // Try to match discriminator with multiple schemes
+        for ix in instructions {
+            let ix_name = ix.get("name")?.as_str()?;
+            
+            // Generate all possible discriminators for this instruction
+            let possible_discriminators = generate_all_discriminators(ix_name);
+            
+            // Check if any match
+            if possible_discriminators.iter().any(|d| d == discriminator) {
+                let args_data = &instruction_data[8..];
+                let mut args = HashMap::new();
+                args.insert("data_hex".to_string(), Value::String(hex::encode(args_data)));
+
+                if let Some(args_array) = ix.get("args").and_then(|a| a.as_array()) {
+                    let arg_names: Vec<String> = args_array
+                        .iter()
+                        .filter_map(|arg| arg.get("name")?.as_str().map(String::from))
+                        .collect();
+
+                    if !arg_names.is_empty() {
+                        args.insert(
+                            "expected_args".to_string(),
+                            Value::Array(arg_names.into_iter().map(Value::String).collect()),
+                        );
+                    }
+                }
+
+                return Some(CustomInstructionData {
+                    program_name,
+                    instruction_name: ix_name.to_string(),
+                    args,
+                });
+            }
+        }
+
+        None
+    }
+}
+
+struct CustomInstructionData {
+    program_name: String,
+    instruction_name: String,
+    args: HashMap<String, Value>,
+}
+
+/// Generate all possible discriminator schemes for an instruction name
+fn generate_all_discriminators(ix_name: &str) -> Vec<[u8; 8]> {
+    let mut discriminators = Vec::new();
+    
+    // Scheme 1: Anchor style - global:camelCase
+    discriminators.push(compute_discriminator(&format!("global:{}", ix_name)));
+    
+    // Scheme 2: Anchor style - global:PascalCase
+    let pascal_case = to_pascal_case(ix_name);
+    discriminators.push(compute_discriminator(&format!("global:{}", pascal_case)));
+    
+    // Scheme 3: Shank style - global:snake_case
+    let snake_case = to_snake_case(ix_name);
+    discriminators.push(compute_discriminator(&format!("global:{}", snake_case)));
+    
+    // Scheme 4: Just the name without prefix
+    discriminators.push(compute_discriminator(ix_name));
+    
+    // Scheme 5: Just PascalCase without prefix
+    discriminators.push(compute_discriminator(&pascal_case));
+    
+    // Scheme 6: Just snake_case without prefix
+    discriminators.push(compute_discriminator(&snake_case));
+    
+    discriminators
+}
+
+fn compute_discriminator(preimage: &str) -> [u8; 8] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(preimage.as_bytes());
+    let hash = hasher.finalize();
+    let mut disc = [0u8; 8];
+    disc.copy_from_slice(&hash[..8]);
+    disc
+}
+
+fn to_pascal_case(s: &str) -> String {
+    if s.is_empty() {
+        return s.to_string();
+    }
+    
+    let mut chars = s.chars();
+    let first = chars.next().unwrap().to_uppercase().to_string();
+    let rest: String = chars.collect();
+    
+    format!("{}{}", first, rest)
+}
+
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(ch.to_ascii_lowercase());
+    }
+    result
 }

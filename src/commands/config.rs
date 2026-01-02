@@ -1,7 +1,7 @@
 use {
     crate::{
         commands::CommandFlow,
-        config::{ScillaConfig, scilla_config_path},
+        config::{IdlConfig, ScillaConfig, expand_tilde, scilla_config_path},
         context::ScillaContext,
         prompt::prompt_input_data,
         ui::print_error,
@@ -48,6 +48,7 @@ enum ConfigField {
     RpcUrl,
     CommitmentLevel,
     KeypairPath,
+    IdlPath,
     None, // if None is chosen , we go back to previous context
 }
 
@@ -57,6 +58,7 @@ impl fmt::Display for ConfigField {
             ConfigField::RpcUrl => write!(f, "RPC URL"),
             ConfigField::CommitmentLevel => write!(f, "Commitment Level"),
             ConfigField::KeypairPath => write!(f, "Keypair Path"),
+            ConfigField::IdlPath => write!(f, "IDL Path"),
             ConfigField::None => write!(f, "None"),
         }
     }
@@ -68,6 +70,7 @@ impl ConfigField {
             ConfigField::RpcUrl,
             ConfigField::CommitmentLevel,
             ConfigField::KeypairPath,
+            ConfigField::IdlPath,
             ConfigField::None,
         ]
     }
@@ -130,6 +133,18 @@ fn show_config() -> anyhow::Result<()> {
         .add_row(vec![
             Cell::new("Keypair Path"),
             Cell::new(config.keypair_path.display()),
+        ])
+        .add_row(vec![
+            Cell::new("IDL Path"),
+            Cell::new(config.idl.custom_idl_path.display()),
+        ])
+        .add_row(vec![
+            Cell::new("Fetch IDL from Chain"),
+            Cell::new(config.idl.fetch_from_chain.to_string()),
+        ])
+        .add_row(vec![
+            Cell::new("Cache IDLs"),
+            Cell::new(config.idl.cache_idls.to_string()),
         ]);
 
     println!("\n{}", style("SCILLA CONFIG").green().bold());
@@ -210,6 +225,7 @@ pub fn generate_config() -> anyhow::Result<()> {
             rpc_url,
             commitment_level,
             keypair_path,
+            idl: IdlConfig::default(),
         }
     };
 
@@ -296,6 +312,19 @@ fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
 
                 config.keypair_path = keypair_input;
                 break;
+            }
+        }
+        ConfigField::IdlPath => {
+            let new_path: String = prompt_input_data("Enter IDL directory path:");
+            config.idl.custom_idl_path = expand_tilde(&new_path);
+
+            if let Err(e) = config.ensure_idl_directory() {
+                println!(
+                    "{}",
+                    style(format!("Warning: Could not create IDL directory: {}", e)).red()
+                );
+            } else {
+                println!("{}", style("IDL directory created/verified").green());
             }
         }
         ConfigField::None => return Ok(()),
