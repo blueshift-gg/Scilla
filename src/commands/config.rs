@@ -3,7 +3,7 @@ use {
         commands::CommandFlow,
         config::{ScillaConfig, scilla_config_path},
         context::ScillaContext,
-        misc::helpers::{short_pubkey},
+        misc::helpers::short_pubkey,
         prompt::{prompt_input_data, prompt_keypair_path},
         ui::print_error,
     },
@@ -122,7 +122,7 @@ fn show_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
     let keypair_display = format!(
         "{} ({})",
         config.keypair_path.display(),
-        short_pubkey(&wallet_pubkey),
+        short_pubkey(wallet_pubkey),
     );
     table
         .load_preset(UTF8_FULL)
