@@ -1033,10 +1033,10 @@ async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
 
     let mut table = Table::new();
     table.load_preset(UTF8_FULL).set_header(vec![
-        Cell::new("Epoch").add_attribute(comfy_table::Attribute::Bold),
-        Cell::new("Effective Stake").add_attribute(comfy_table::Attribute::Bold),
-        Cell::new("Activating Stake").add_attribute(comfy_table::Attribute::Bold),
-        Cell::new("Deactivating Stake").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Epoch").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Effective Stake").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Activating Stake").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
+        Cell::new("Deactivating Stake").add_attribute(comfy_table::Attribute::Bold).fg(comfy_table::Color::Cyan),
     ]);
 
     for (epoch, entry) in stake_history.iter().take(DEFAULT_EPOCH_LIMIT) {
