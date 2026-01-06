@@ -257,6 +257,9 @@ async fn fetch_validators(ctx: &ScillaContext) -> anyhow::Result<()> {
 
     // Validators detail table
     if !validators.current.is_empty() {
+        let mut validators = validators.current;
+        validators.sort_by(|a, b| b.activated_stake.cmp(&a.activated_stake)); // descending
+
         let mut validators_table = Table::new();
         validators_table.load_preset(UTF8_FULL).set_header(vec![
             Cell::new("#").add_attribute(comfy_table::Attribute::Bold),
@@ -265,17 +268,18 @@ async fn fetch_validators(ctx: &ScillaContext) -> anyhow::Result<()> {
             Cell::new("Activated Stake (SOL)").add_attribute(comfy_table::Attribute::Bold),
         ]);
 
-        for (idx, validator) in validators.current.iter().enumerate() {
-            let stake_sol = (validator.activated_stake as f64).div(LAMPORTS_PER_SOL as f64);
+        for (idx, validator) in validators.iter().take(10).enumerate() {
+            let stake_sol = (validator.activated_stake as f64) / (LAMPORTS_PER_SOL as f64);
+
             validators_table.add_row(vec![
-                Cell::new(format!("{}", idx + 1)),
+                Cell::new(idx + 1),
                 Cell::new(&validator.node_pubkey),
                 Cell::new(&validator.vote_pubkey),
                 Cell::new(format!("{stake_sol:.2}")),
             ]);
         }
 
-        println!("\n{}", style("TOP VALIDATORS").green().bold());
+        println!("\n{}", style("TOP 10 VALIDATORS BY STAKE").green().bold());
         println!("{validators_table}");
     }
 
