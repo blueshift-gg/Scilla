@@ -1094,21 +1094,18 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
             Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
             Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
         ])
-        .add_row(vec![
-            Cell::new("Stake Account Pubkey"),
-            Cell::new(pubkey.to_string()),
-        ])
+        .add_row(vec![Cell::new("Stake Account Pubkey"), Cell::new(pubkey)])
         .add_row(vec![
             Cell::new("Account Balance (SOL)"),
             Cell::new(lamports_to_sol(stake_account.lamports)),
         ])
         .add_row(vec![
             Cell::new("Account Balance (Lamports)"),
-            Cell::new(stake_account.lamports.to_string()),
+            Cell::new(stake_account.lamports),
         ])
         .add_row(vec![
             Cell::new("Rent Epoch"),
-            Cell::new(stake_account.rent_epoch.to_string()),
+            Cell::new(stake_account.rent_epoch),
         ]);
 
     // Add stake state specific information
@@ -1125,30 +1122,27 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
                 .add_row(vec![Cell::new("Stake State"), Cell::new("Initialized")])
                 .add_row(vec![
                     Cell::new("Rent Exempt Reserve (Lamports)"),
-                    Cell::new(rent_exempt_reserve.to_string()),
+                    Cell::new(rent_exempt_reserve),
                 ])
                 .add_row(vec![
                     Cell::new("Stake Authority"),
-                    Cell::new(authorized.staker.to_string()),
+                    Cell::new(authorized.staker),
                 ])
                 .add_row(vec![
                     Cell::new("Withdraw Authority"),
-                    Cell::new(authorized.withdrawer.to_string()),
+                    Cell::new(authorized.withdrawer),
                 ]);
 
             if lockup.is_in_force(&clock, None) {
                 table
-                    .add_row(vec![
-                        Cell::new("Lockup Epoch"),
-                        Cell::new(lockup.epoch.to_string()),
-                    ])
+                    .add_row(vec![Cell::new("Lockup Epoch"), Cell::new(lockup.epoch)])
                     .add_row(vec![
                         Cell::new("Lockup Unix Timestamp"),
-                        Cell::new(lockup.unix_timestamp.to_string()),
+                        Cell::new(lockup.unix_timestamp),
                     ])
                     .add_row(vec![
                         Cell::new("Lockup Custodian"),
-                        Cell::new(lockup.custodian.to_string()),
+                        Cell::new(lockup.custodian),
                     ]);
             }
         }
@@ -1174,15 +1168,15 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
                 .add_row(vec![Cell::new("Stake State"), Cell::new("Delegated")])
                 .add_row(vec![
                     Cell::new("Stake Authority"),
-                    Cell::new(authorized.staker.to_string()),
+                    Cell::new(authorized.staker),
                 ])
                 .add_row(vec![
                     Cell::new("Withdraw Authority"),
-                    Cell::new(authorized.withdrawer.to_string()),
+                    Cell::new(authorized.withdrawer),
                 ])
                 .add_row(vec![
                     Cell::new("Delegated Vote Account"),
-                    Cell::new(stake.delegation.voter_pubkey.to_string()),
+                    Cell::new(stake.delegation.voter_pubkey),
                 ])
                 .add_row(vec![
                     Cell::new("Delegated Stake (SOL)"),
@@ -1218,22 +1212,19 @@ async fn show_stake_account(ctx: &ScillaContext, pubkey: &Pubkey) -> anyhow::Res
                 ])
                 .add_row(vec![
                     Cell::new("Credits Observed"),
-                    Cell::new(stake.credits_observed.to_string()),
+                    Cell::new(stake.credits_observed),
                 ]);
 
             if lockup.is_in_force(&clock, None) {
                 table
-                    .add_row(vec![
-                        Cell::new("Lockup Epoch"),
-                        Cell::new(lockup.epoch.to_string()),
-                    ])
+                    .add_row(vec![Cell::new("Lockup Epoch"), Cell::new(lockup.epoch)])
                     .add_row(vec![
                         Cell::new("Lockup Unix Timestamp"),
-                        Cell::new(lockup.unix_timestamp.to_string()),
+                        Cell::new(lockup.unix_timestamp),
                     ])
                     .add_row(vec![
                         Cell::new("Lockup Custodian"),
-                        Cell::new(lockup.custodian.to_string()),
+                        Cell::new(lockup.custodian),
                     ]);
             }
         }

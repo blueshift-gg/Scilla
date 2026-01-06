@@ -272,9 +272,9 @@ async fn fetch_validators(ctx: &ScillaContext) -> anyhow::Result<()> {
             let stake_sol = (validator.activated_stake as f64) / (LAMPORTS_PER_SOL as f64);
 
             validators_table.add_row(vec![
-                Cell::new((idx + 1).to_string()),
-                Cell::new(validator.node_pubkey.to_string()),
-                Cell::new(validator.vote_pubkey.to_string()),
+                Cell::new(idx + 1),
+                Cell::new(&validator.node_pubkey),
+                Cell::new(&validator.vote_pubkey),
                 Cell::new(format!("{stake_sol:.2}")),
             ]);
         }
