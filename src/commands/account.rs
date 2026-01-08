@@ -26,6 +26,7 @@ pub enum AccountCommand {
     Airdrop,
     LargestAccounts,
     NonceAccount,
+    Rent,
     GoBack,
 }
 
@@ -38,6 +39,7 @@ impl AccountCommand {
             AccountCommand::Airdrop => "Requesting SOL on devnet/testnet…",
             AccountCommand::LargestAccounts => "Fetching largest accounts on the cluster…",
             AccountCommand::NonceAccount => "Inspecting or managing durable nonces…",
+            AccountCommand::Rent => "Checking rent…",
             AccountCommand::GoBack => "Going back…",
         }
     }
@@ -52,6 +54,7 @@ impl fmt::Display for AccountCommand {
             AccountCommand::Airdrop => "Request airdrop",
             AccountCommand::LargestAccounts => "View largest accounts",
             AccountCommand::NonceAccount => "View nonce account",
+            AccountCommand::Rent => "Check rent",
             AccountCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
@@ -83,6 +86,11 @@ impl AccountCommand {
             AccountCommand::NonceAccount => {
                 let pubkey: Pubkey = prompt_input_data("Enter nonce account pubkey:");
                 show_spinner(self.spinner_msg(), fetch_nonce_account(ctx, &pubkey)).await;
+            }
+            AccountCommand::Rent => {
+                // get the rent for data bytes used in account
+                let bytes: usize = prompt_input_data("Enter data size in bytes:");
+                show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
             }
             AccountCommand::GoBack => {
                 return CommandFlow::GoBack;
@@ -289,6 +297,42 @@ async fn transfer_sol(
         style(format!("Signature: {}", signature)).yellow(),
         style(format!("Recipient Address: {}", receiver)).yellow()
     );
+
+    Ok(())
+}
+
+async fn fetch_rent(ctx: &ScillaContext, bytes: usize) -> anyhow::Result<()> {
+    let min_balance = ctx
+        .rpc()
+        .get_minimum_balance_for_rent_exemption(bytes)
+        .await?;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Value")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+        ])
+        .add_row(vec![
+            Cell::new("Data Size"),
+            Cell::new(format!("{} bytes", bytes)),
+        ])
+        .add_row(vec![
+            Cell::new("Minimum Balance (lamports)"),
+            Cell::new(format!("{}", min_balance)),
+        ])
+        .add_row(vec![
+            Cell::new("Minimum Balance (SOL)"),
+            Cell::new(format!("{:.9}", lamports_to_sol(min_balance))),
+        ]);
+
+    println!("\n{}", style("RENT EXEMPTION").green().bold());
+    println!("{table}");
 
     Ok(())
 }

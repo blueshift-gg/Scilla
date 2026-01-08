@@ -90,9 +90,11 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
             AccountCommand::Airdrop,
             AccountCommand::LargestAccounts,
             AccountCommand::NonceAccount,
+            AccountCommand::Rent,
             AccountCommand::GoBack,
         ],
     )
+    .with_page_size(10)
     .prompt()?;
 
     Ok(choice)
