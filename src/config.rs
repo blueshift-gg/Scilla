@@ -168,6 +168,11 @@ mod tests {
 rpc-url = "https://api.mainnet-beta.solana.com"
 keypair-path = "~/my/key.json"
 commitment-level = "confirmed"
+
+[idl]
+custom-idl-path = "~/.config/scilla/idls"
+fetch-from-chain = false
+cache-idls = true
 "#,
         )
         .expect("Failed to write file");
@@ -178,5 +183,8 @@ commitment-level = "confirmed"
         assert_eq!(config.rpc_url, "https://api.mainnet-beta.solana.com");
         assert_eq!(config.commitment_level, CommitmentLevel::Confirmed);
         assert_eq!(config.keypair_path, home.join("my/key.json"));
+        assert_eq!(config.idl.custom_idl_path, home.join(".config/scilla/idls"));
+        assert!(!config.idl.fetch_from_chain);
+        assert!(config.idl.cache_idls);
     }
 }
