@@ -34,6 +34,25 @@ where
     Ok(expand_tilde(&s))
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct IdlConfig {
+    #[serde(deserialize_with = "deserialize_path_with_tilde")]
+    pub custom_idl_path: PathBuf,
+    pub fetch_from_chain: bool,
+    pub cache_idls: bool,
+}
+
+impl Default for IdlConfig {
+    fn default() -> Self {
+        Self {
+            custom_idl_path: expand_tilde("~/.config/scilla/idls"),
+            fetch_from_chain: false,
+            cache_idls: true,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ScillaConfig {
@@ -41,6 +60,7 @@ pub struct ScillaConfig {
     pub commitment_level: CommitmentLevel,
     #[serde(deserialize_with = "deserialize_path_with_tilde")]
     pub keypair_path: PathBuf,
+    pub idl: IdlConfig,
 }
 
 impl Default for ScillaConfig {
@@ -53,6 +73,7 @@ impl Default for ScillaConfig {
             rpc_url: DEVNET_RPC.to_string(),
             commitment_level: CommitmentLevel::Confirmed,
             keypair_path: default_keypair_path,
+            idl: IdlConfig::default(),
         }
     }
 }
@@ -92,6 +113,7 @@ impl ScillaConfig {
         );
         let data = fs::read_to_string(scilla_config_path)?;
         let config: ScillaConfig = toml::from_str(&data)?;
+        config.ensure_idl_directory()?;
         Ok(config)
     }
 
@@ -102,6 +124,13 @@ impl ScillaConfig {
         let data = fs::read_to_string(path)?;
         let config: ScillaConfig = toml::from_str(&data)?;
         Ok(config)
+    }
+    pub fn ensure_idl_directory(&self) -> Result<(), ScillaError> {
+        if !self.idl.custom_idl_path.exists() {
+            fs::create_dir_all(&self.idl.custom_idl_path)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -139,6 +168,11 @@ mod tests {
 rpc-url = "https://api.mainnet-beta.solana.com"
 keypair-path = "~/my/key.json"
 commitment-level = "confirmed"
+
+[idl]
+custom-idl-path = "~/.config/scilla/idls"
+fetch-from-chain = false
+cache-idls = true
 "#,
         )
         .expect("Failed to write file");
@@ -149,5 +183,8 @@ commitment-level = "confirmed"
         assert_eq!(config.rpc_url, "https://api.mainnet-beta.solana.com");
         assert_eq!(config.commitment_level, CommitmentLevel::Confirmed);
         assert_eq!(config.keypair_path, home.join("my/key.json"));
+        assert_eq!(config.idl.custom_idl_path, home.join(".config/scilla/idls"));
+        assert!(!config.idl.fetch_from_chain);
+        assert!(config.idl.cache_idls);
     }
 }

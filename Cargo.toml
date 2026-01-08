@@ -46,6 +46,13 @@ base64 = "0.22.1"
 bs58 = "0.5.1"
 solana-transaction-status = "3.1.4"
 solana-system-interface = { version = "3.0.0", features = ["bincode"] }
+serde_json = "1.0.148"
+anchor-lang-idl = "0.1.2"
+borsh = "1.6.0"
+sha2 = "0.10.9"
+hex = "0.4.3"
+
+
 
 [dev-dependencies]
 tempfile = "3.8"
