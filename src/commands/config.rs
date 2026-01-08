@@ -4,7 +4,7 @@ use {
         config::{ScillaConfig, scilla_config_path},
         context::ScillaContext,
         misc::helpers::short_pubkey,
-        prompt::{prompt_input_data, prompt_keypair_path},
+        prompt::{prompt_input_data, prompt_keypair_path, prompt_network_rpc_url},
         ui::print_error,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
@@ -49,7 +49,7 @@ enum ConfigField {
     RpcUrl,
     CommitmentLevel,
     KeypairPath,
-    None, // if None is chosen , we go back to previous context
+    None,
 }
 
 impl fmt::Display for ConfigField {
@@ -255,7 +255,18 @@ fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
 
     match selected_field {
         ConfigField::RpcUrl => {
-            config.rpc_url = prompt_input_data("Enter RPC URL:");
+            let choice = Select::new(
+                "Do you want to use a custom RPC Url or one of the defaults?",
+                vec!["Default", "Custom"],
+            )
+            .prompt()?;
+            let new_rpc_url = match choice {
+                "Default" => prompt_network_rpc_url()?,
+                "Custom" => prompt_input_data::<String>("Enter custom RPC URL:"),
+                _ => unreachable!(),
+            };
+
+            config.rpc_url = new_rpc_url;
         }
         ConfigField::CommitmentLevel => {
             let selected =
