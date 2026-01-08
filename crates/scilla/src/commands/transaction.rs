@@ -12,9 +12,11 @@ use {
     solana_rpc_client_api::config::RpcTransactionConfig,
     solana_signature::Signature,
     solana_transaction_status::{
-        EncodedTransaction, UiInnerInstructions, UiMessage, UiTransactionEncoding,
+        
+        EncodedTransaction, UiInnerInstructions, UiInstruction, UiMessage, UiParsedInstruction, UiTransactionEncoding,
+
     },
-    std::fmt,
+    std::{fmt, os::unix::process},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -24,6 +26,7 @@ pub enum TransactionCommand {
     FetchTransaction,
     SendTransaction,
     SimulateTransaction,
+    ParseInstructions,
     GoBack,
 }
 
@@ -35,6 +38,7 @@ impl TransactionCommand {
             Self::FetchTransaction => "Fetching full transaction data…",
             Self::SendTransaction => "Sending transaction…",
             Self::SimulateTransaction => "Simulating transaction…",
+            Self::ParseInstructions => "Parsing transaction instructions…",
             Self::GoBack => "Going back…",
         }
     }
@@ -48,6 +52,7 @@ impl fmt::Display for TransactionCommand {
             Self::FetchTransaction => "Fetch Transaction",
             Self::SendTransaction => "Send Transaction",
             Self::SimulateTransaction => "Simulate Transaction",
+            Self::ParseInstructions => "Parse Instructions",
             Self::GoBack => "Go back",
         })
     }
@@ -580,5 +585,537 @@ async fn simulate_transaction(
         println!("{addr_table}");
     }
 
+    Ok(())
+}
+
+async fn process_parse_instructions(
+    ctx: &ScillaContext,
+    signature: &Signature,
+) -> anyhow::Result<()> {
+    // Fetch the transaction with JsonParsed encoding
+    let tx = ctx
+        .rpc()
+        .get_transaction_with_config(
+            signature,
+            RpcTransactionConfig {
+                encoding: Some(UiTransactionEncoding::JsonParsed),
+                commitment: Some(ctx.rpc().commitment()),
+                max_supported_transaction_version: Some(0),
+            },
+        )
+        .await?;
+
+    let EncodedTransaction::Json(ui_tx) = &tx.transaction.transaction else {
+        anyhow::bail!("Transaction encoding is not JSON");
+    };
+
+    let UiMessage::Parsed(parsed_msg) = &ui_tx.message else {
+        anyhow::bail!("Transaction message is not parsed");
+    };
+
+    if parsed_msg.instructions.is_empty() {
+        println!("{}", style("No instructions found in transaction").yellow());
+        return Ok(());
+    }
+
+    println!("\n{}", style("PARSED INSTRUCTIONS").green().bold());
+    println!(
+        "{} {}\n",
+        style("Transaction:").dim(),
+        style(signature).cyan()
+    );
+
+    // Display each instruction
+    for (idx, ui_instruction) in parsed_msg.instructions.iter().enumerate() {
+        display_instruction(idx + 1, ui_instruction)?;
+    }
+
+    Ok(())
+}
+
+fn display_instruction(idx: usize, ui_instruction: &UiInstruction) -> anyhow::Result<()> {
+    println!("{}", style(format!("Instruction #{}", idx)).cyan().bold());
+
+    match ui_instruction {
+        UiInstruction::Parsed(ui_parsed_ix) => match ui_parsed_ix {
+            UiParsedInstruction::Parsed(parsed_ix) => display_parsed_instruction(parsed_ix),
+            UiParsedInstruction::PartiallyDecoded(partial_ix) => {
+                display_partially_decoded_instruction(partial_ix)
+            }
+        },
+        UiInstruction::Compiled(compiled_ix) => display_compiled_instruction(compiled_ix),
+    }
+}
+
+fn display_parsed_instruction(
+    parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    let Value::Object(parsed_map) = &parsed_ix.parsed else {
+        return display_generic_parsed(parsed_ix);
+    };
+
+    let ix_type = parsed_map
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    let info = parsed_map.get("info");
+
+    // Match on program name
+    match parsed_ix.program.as_str() {
+        "system" => display_system_instruction(ix_type, info),
+        "spl-token" | "spl-token-2022" => display_token_instruction(ix_type, info),
+        "spl-associated-token-account" => display_ata_instruction(ix_type, info),
+        "spl-memo" => display_memo_instruction(info),
+        _ => display_generic_parsed(parsed_ix),
+    }
+}
+
+fn display_system_instruction(
+    ix_type: &str,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![Cell::new("Program"), Cell::new("System Program")])
+        .add_row(vec![Cell::new("Type"), Cell::new(ix_type)]);
+
+    if let Some(Value::Object(info_map)) = info {
+        match ix_type {
+            "transfer" => {
+                if let (Some(source), Some(destination), Some(lamports)) = (
+                    info_map.get("source").and_then(|v| v.as_str()),
+                    info_map.get("destination").and_then(|v| v.as_str()),
+                    info_map.get("lamports").and_then(|v| v.as_u64()),
+                ) {
+                    table
+                        .add_row(vec![Cell::new("From"), Cell::new(source)])
+                        .add_row(vec![Cell::new("To"), Cell::new(destination)])
+                        .add_row(vec![
+                            Cell::new("Amount"),
+                            Cell::new(format!(
+                                "{} lamports ({} SOL)",
+                                lamports,
+                                crate::misc::helpers::lamports_to_sol(lamports)
+                            )),
+                        ]);
+                }
+            }
+            "createAccount" => {
+                if let (Some(source), Some(new_account), Some(lamports), Some(space), Some(owner)) = (
+                    info_map.get("source").and_then(|v| v.as_str()),
+                    info_map.get("newAccount").and_then(|v| v.as_str()),
+                    info_map.get("lamports").and_then(|v| v.as_u64()),
+                    info_map.get("space").and_then(|v| v.as_u64()),
+                    info_map.get("owner").and_then(|v| v.as_str()),
+                ) {
+                    table
+                        .add_row(vec![Cell::new("Funder"), Cell::new(source)])
+                        .add_row(vec![Cell::new("New Account"), Cell::new(new_account)])
+                        .add_row(vec![
+                            Cell::new("Lamports"),
+                            Cell::new(format!(
+                                "{} lamports ({} SOL)",
+                                lamports,
+                                crate::misc::helpers::lamports_to_sol(lamports)
+                            )),
+                        ])
+                        .add_row(vec![
+                            Cell::new("Space"),
+                            Cell::new(format!("{} bytes", space)),
+                        ])
+                        .add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                }
+            }
+            "assign" => {
+                if let (Some(account), Some(owner)) = (
+                    info_map.get("account").and_then(|v| v.as_str()),
+                    info_map.get("owner").and_then(|v| v.as_str()),
+                ) {
+                    table
+                        .add_row(vec![Cell::new("Account"), Cell::new(account)])
+                        .add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                }
+            }
+            "allocate" => {
+                if let (Some(account), Some(space)) = (
+                    info_map.get("account").and_then(|v| v.as_str()),
+                    info_map.get("space").and_then(|v| v.as_u64()),
+                ) {
+                    table
+                        .add_row(vec![Cell::new("Account"), Cell::new(account)])
+                        .add_row(vec![
+                            Cell::new("Space"),
+                            Cell::new(format!("{} bytes", space)),
+                        ]);
+                }
+            }
+            _ => {
+                // Generic display for other system instructions
+                for (key, value) in info_map {
+                    let display_value = match value {
+                        Value::Object(_) => serde_json::to_string_pretty(value)?,
+                        Value::Array(_) => serde_json::to_string(value)?,
+                        _ => value.to_string().trim_matches('"').to_string(),
+                    };
+                    table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
+                }
+            }
+        }
+    }
+
+    println!("{}\n", table);
+    Ok(())
+}
+
+fn display_token_instruction(
+    ix_type: &str,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![Cell::new("Program"), Cell::new("Token Program")])
+        .add_row(vec![Cell::new("Type"), Cell::new(ix_type)]);
+
+    if let Some(Value::Object(info_map)) = info {
+        match ix_type {
+            "transfer" | "transferChecked" => {
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("From"), Cell::new(source)]);
+                }
+                if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("To"), Cell::new(destination)]);
+                }
+
+                // Amount - try tokenAmount object first, then fall back to amount field
+                if let Some(token_amount) = info_map.get("tokenAmount") {
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        table.add_row(vec![
+                            Cell::new("Amount"),
+                            Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
+                        ]);
+                    }
+                } else if let Some(amount_val) = info_map.get("amount") {
+                    let amount = if let Some(s) = amount_val.as_str() {
+                        s.to_string()
+                    } else if let Some(n) = amount_val.as_u64() {
+                        n.to_string()
+                    } else {
+                        amount_val.to_string()
+                    };
+                    table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
+                }
+
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                }
+
+                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str())
+                {
+                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
+                } else if let Some(authority) = info_map.get("authority").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
+                }
+            }
+            "mintTo" | "mintToChecked" => {
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                }
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                }
+
+                if let Some(token_amount) = info_map.get("tokenAmount") {
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        table.add_row(vec![
+                            Cell::new("Amount"),
+                            Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
+                        ]);
+                    }
+                } else if let Some(amount_val) = info_map.get("amount") {
+                    let amount = if let Some(s) = amount_val.as_str() {
+                        s.to_string()
+                    } else if let Some(n) = amount_val.as_u64() {
+                        n.to_string()
+                    } else {
+                        amount_val.to_string()
+                    };
+                    table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
+                }
+
+                if let Some(authority) = info_map.get("mintAuthority").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint Authority"), Cell::new(authority)]);
+                } else if let Some(authority) = info_map
+                    .get("multisigMintAuthority")
+                    .and_then(|v| v.as_str())
+                {
+                    table.add_row(vec![Cell::new("Mint Authority"), Cell::new(authority)]);
+                }
+            }
+            "burn" | "burnChecked" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                }
+
+                if let Some(token_amount) = info_map.get("tokenAmount") {
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        table.add_row(vec![
+                            Cell::new("Amount"),
+                            Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
+                        ]);
+                    }
+                } else if let Some(amount_val) = info_map.get("amount") {
+                    let amount = if let Some(s) = amount_val.as_str() {
+                        s.to_string()
+                    } else if let Some(n) = amount_val.as_u64() {
+                        n.to_string()
+                    } else {
+                        amount_val.to_string()
+                    };
+                    table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
+                }
+
+                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str())
+                {
+                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
+                } else if let Some(authority) = info_map.get("authority").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
+                }
+            }
+            "initializeMint" | "initializeMint2" => {
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                }
+                if let Some(decimals) = info_map.get("decimals").and_then(|v| v.as_u64()) {
+                    table.add_row(vec![Cell::new("Decimals"), Cell::new(decimals)]);
+                }
+                if let Some(mint_authority) = info_map.get("mintAuthority").and_then(|v| v.as_str())
+                {
+                    table.add_row(vec![Cell::new("Mint Authority"), Cell::new(mint_authority)]);
+                }
+                if let Some(freeze_authority) =
+                    info_map.get("freezeAuthority").and_then(|v| v.as_str())
+                {
+                    table.add_row(vec![
+                        Cell::new("Freeze Authority"),
+                        Cell::new(freeze_authority),
+                    ]);
+                }
+            }
+            "initializeAccount" | "initializeAccount2" | "initializeAccount3" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                }
+            }
+            "closeAccount" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                }
+                if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Destination"), Cell::new(destination)]);
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                }
+            }
+            _ => {
+                // Generic display for other token instructions
+                for (key, value) in info_map {
+                    let display_value = match value {
+                        Value::Object(_) => serde_json::to_string_pretty(value)?,
+                        Value::Array(_) => serde_json::to_string(value)?,
+                        _ => value.to_string().trim_matches('"').to_string(),
+                    };
+                    table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
+                }
+            }
+        }
+    }
+
+    println!("{}\n", table);
+    Ok(())
+}
+
+fn display_ata_instruction(ix_type: &str, info: Option<&serde_json::Value>) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Program"),
+            Cell::new("Associated Token Account Program"),
+        ])
+        .add_row(vec![Cell::new("Type"), Cell::new(ix_type)]);
+
+    if let Some(Value::Object(info_map)) = info {
+        match ix_type {
+            "create" => {
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Funder"), Cell::new(source)]);
+                }
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("ATA"), Cell::new(account)]);
+                }
+                if let Some(wallet) = info_map.get("wallet").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Owner"), Cell::new(wallet)]);
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                }
+            }
+            _ => {
+                for (key, value) in info_map {
+                    table.add_row(vec![Cell::new(key), Cell::new(value.to_string())]);
+                }
+            }
+        }
+    }
+
+    println!("{}\n", table);
+    Ok(())
+}
+
+fn display_memo_instruction(info: Option<&serde_json::Value>) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![Cell::new("Program"), Cell::new("Memo Program")]);
+
+    if let Some(Value::String(memo)) = info {
+        table.add_row(vec![Cell::new("Memo"), Cell::new(memo)]);
+    }
+
+    println!("{}\n", table);
+    Ok(())
+}
+
+fn display_generic_parsed(
+    parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
+) -> anyhow::Result<()> {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![Cell::new("Program"), Cell::new(&parsed_ix.program)])
+        .add_row(vec![
+            Cell::new("Program ID"),
+            Cell::new(&parsed_ix.program_id),
+        ]);
+
+    println!("{}", table);
+    println!("{}", style("Parsed Data:").dim());
+    println!("{}\n", serde_json::to_string_pretty(&parsed_ix.parsed)?);
+    Ok(())
+}
+
+fn display_partially_decoded_instruction(
+    partial_ix: &solana_transaction_status::UiPartiallyDecodedInstruction,
+) -> anyhow::Result<()> {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Program ID"),
+            Cell::new(&partial_ix.program_id),
+        ])
+        .add_row(vec![Cell::new("Program"), Cell::new("Unknown Program")])
+        .add_row(vec![
+            Cell::new("Accounts"),
+            Cell::new(partial_ix.accounts.len()),
+        ])
+        .add_row(vec![
+            Cell::new("Data (Base58)"),
+            Cell::new(&partial_ix.data),
+        ]);
+
+    println!("{}\n", table);
+    Ok(())
+}
+
+fn display_compiled_instruction(
+    compiled_ix: &solana_transaction_status::UiCompiledInstruction,
+) -> anyhow::Result<()> {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Program Index"),
+            Cell::new(compiled_ix.program_id_index),
+        ])
+        .add_row(vec![
+            Cell::new("Accounts"),
+            Cell::new(compiled_ix.accounts.len()),
+        ])
+        .add_row(vec![
+            Cell::new("Data (Base58)"),
+            Cell::new(&compiled_ix.data),
+        ]);
+
+    println!("{}\n", table);
     Ok(())
 }
