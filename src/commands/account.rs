@@ -200,9 +200,15 @@ async fn fetch_largest_accounts(ctx: &ScillaContext) -> anyhow::Result<()> {
 
     let mut table = Table::new();
     table.load_preset(UTF8_FULL).set_header(vec![
-        Cell::new("#").add_attribute(comfy_table::Attribute::Bold),
-        Cell::new("Address").add_attribute(comfy_table::Attribute::Bold),
-        Cell::new("Balance (SOL)").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("#")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Address")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Balance (SOL)")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
     ]);
 
     for (idx, account) in largest_accounts.iter().enumerate() {

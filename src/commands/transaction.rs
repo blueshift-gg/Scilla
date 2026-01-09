@@ -288,10 +288,18 @@ async fn process_fetch_transaction(
                 println!("\n{}", style("ACCOUNT KEYS").cyan().bold());
                 let mut accounts_table = Table::new();
                 accounts_table.load_preset(UTF8_FULL).set_header(vec![
-                    Cell::new("Index").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new("Pubkey").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new("Signer").add_attribute(comfy_table::Attribute::Bold),
-                    Cell::new("Writable").add_attribute(comfy_table::Attribute::Bold),
+                    Cell::new("Index")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
+                    Cell::new("Pubkey")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
+                    Cell::new("Signer")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
+                    Cell::new("Writable")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
                 ]);
 
                 for (idx, account) in parsed_msg.account_keys.iter().enumerate() {
