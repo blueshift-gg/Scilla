@@ -149,7 +149,7 @@ fn show_config(ctx: &ScillaContext) -> anyhow::Result<()> {
 
 pub fn generate_config() -> anyhow::Result<()> {
     // Check if config already exists
-    let config_path = scilla_config_path();
+    let config_path = scilla_config_path()?;
     if config_path.exists() {
         println!("{}", style("Config file already exists!").yellow().bold());
         println!(
@@ -214,7 +214,7 @@ pub fn generate_config() -> anyhow::Result<()> {
     };
 
     // Write config
-    let config_path = scilla_config_path();
+    let config_path = scilla_config_path()?;
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -301,7 +301,7 @@ fn edit_config(ctx: &mut ScillaContext) -> anyhow::Result<()> {
     }
 
     // Write updated config
-    let config_path = scilla_config_path();
+    let config_path = scilla_config_path()?;
     let toml_string = toml::to_string_pretty(&config)?;
     fs::write(&config_path, toml_string)?;
 

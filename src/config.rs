@@ -10,10 +10,10 @@ use {
     std::{env::home_dir, fs, path::PathBuf},
 };
 
-pub fn scilla_config_path() -> PathBuf {
-    let mut path = home_dir().expect("Error getting home path");
+pub fn scilla_config_path() -> Result<PathBuf, ScillaError> {
+    let mut path = home_dir().ok_or(ScillaError::HomeDirectoryNotFound)?;
     path.push(SCILLA_CONFIG_RELATIVE_PATH);
-    path
+    Ok(path)
 }
 
 pub fn expand_tilde(path: &str) -> PathBuf {
@@ -43,11 +43,9 @@ pub struct ScillaConfig {
     pub keypair_path: PathBuf,
 }
 
-impl Default for ScillaConfig {
-    fn default() -> Self {
-        let default_keypair_path = home_dir()
-            .expect("Could not determine home directory")
-            .join(DEFAULT_KEYPAIR_PATH);
+impl ScillaConfig {
+    pub fn default_with_home(home: PathBuf) -> Self {
+        let default_keypair_path = home.join(DEFAULT_KEYPAIR_PATH);
 
         Self {
             rpc_url: DEVNET_RPC.to_string(),
@@ -57,9 +55,16 @@ impl Default for ScillaConfig {
     }
 }
 
+impl Default for ScillaConfig {
+    fn default() -> Self {
+        let home = home_dir().unwrap_or_else(|| PathBuf::from("."));
+        Self::default_with_home(home)
+    }
+}
+
 impl ScillaConfig {
     pub fn load() -> Result<ScillaConfig, ScillaError> {
-        let scilla_config_path = scilla_config_path();
+        let scilla_config_path = scilla_config_path()?;
 
         if !scilla_config_path.exists() {
             println!("{}", style("No configuration file found!").yellow().bold());
