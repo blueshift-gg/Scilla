@@ -215,7 +215,7 @@ async fn deploy_program(
 
     println!(
         "\n{}\n{}\n{}",
-        style("✓ Program deployed successfully!").green().bold(),
+        style("Program deployed successfully!").green().bold(),
         style(format!("Program ID: {}", program_id)).cyan(),
         style(format!("Signature: {}", sig)).dim()
     );
