@@ -183,7 +183,7 @@ async fn deploy_program(
             &signers,
             SendAndConfirmConfigV2 {
                 resign_txs_count: Some(5),
-                with_spinner: true,
+                with_spinner: false,  // Disable Solana's spinner, we have our own
                 rpc_send_transaction_config: RpcSendTransactionConfig::default(),
             },
         )
