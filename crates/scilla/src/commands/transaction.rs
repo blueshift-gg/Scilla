@@ -1,6 +1,7 @@
 use {
     crate::{
         commands::{Command, CommandFlow, NavigationTarget, navigation::NavigationSection},
+        constants::COMPUTE_BUDGET_PROGRAM_ID,
         context::ScillaContext,
         misc::helpers::decode_and_deserialize_transaction,
         prompt::{prompt_encoding_options, prompt_input_data},
@@ -26,7 +27,6 @@ pub enum TransactionCommand {
     FetchTransaction,
     SendTransaction,
     SimulateTransaction,
-    ParseInstructions,
     GoBack,
 }
 
@@ -38,7 +38,6 @@ impl TransactionCommand {
             Self::FetchTransaction => "Fetching full transaction data…",
             Self::SendTransaction => "Sending transaction…",
             Self::SimulateTransaction => "Simulating transaction…",
-            Self::ParseInstructions => "Parsing transaction instructions…",
             Self::GoBack => "Going back…",
         }
     }
@@ -52,7 +51,6 @@ impl fmt::Display for TransactionCommand {
             Self::FetchTransaction => "Fetch Transaction",
             Self::SendTransaction => "Send Transaction",
             Self::SimulateTransaction => "Simulate Transaction",
-            Self::ParseInstructions => "Parse Instructions",
             Self::GoBack => "Go back",
         })
     }
@@ -77,7 +75,17 @@ impl Command for TransactionCommand {
             }
             TransactionCommand::FetchTransaction => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
-                show_spinner(self.spinner_msg(), fetch_transaction(ctx, &signature)).await;
+                let parse_instructions = inquire::Confirm::new(
+                    "Do you want to parse instructions for this transaction?",
+                )
+                .with_default(true)
+                .prompt()
+                .unwrap_or(true);
+                show_spinner(
+                    self.spinner_msg(),
+                    process_fetch_transaction(ctx, &signature, &parse_instructions),
+                )
+                .await;
             }
             TransactionCommand::SendTransaction => {
                 println!(
@@ -223,7 +231,11 @@ async fn fetch_transaction_status(
     Ok(())
 }
 
-async fn fetch_transaction(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
+async fn process_fetch_transaction(
+    ctx: &ScillaContext,
+    signature: &Signature,
+    parse_instructions: &bool,
+) -> anyhow::Result<()> {
     let tx = ctx
         .rpc()
         .get_transaction_with_config(
@@ -318,6 +330,10 @@ async fn fetch_transaction(ctx: &ScillaContext, signature: &Signature) -> anyhow
                     ]);
                 }
                 println!("{accounts_table}");
+            }
+
+            if *parse_instructions {
+                process_parse_instructions(parsed_msg).await?;
             }
         }
         UiMessage::Raw(raw_msg) => {
@@ -589,41 +605,14 @@ async fn simulate_transaction(
 }
 
 async fn process_parse_instructions(
-    ctx: &ScillaContext,
-    signature: &Signature,
+    parsed_msg: &solana_transaction_status::UiParsedMessage,
 ) -> anyhow::Result<()> {
-    // Fetch the transaction with JsonParsed encoding
-    let tx = ctx
-        .rpc()
-        .get_transaction_with_config(
-            signature,
-            RpcTransactionConfig {
-                encoding: Some(UiTransactionEncoding::JsonParsed),
-                commitment: Some(ctx.rpc().commitment()),
-                max_supported_transaction_version: Some(0),
-            },
-        )
-        .await?;
-
-    let EncodedTransaction::Json(ui_tx) = &tx.transaction.transaction else {
-        anyhow::bail!("Transaction encoding is not JSON");
-    };
-
-    let UiMessage::Parsed(parsed_msg) = &ui_tx.message else {
-        anyhow::bail!("Transaction message is not parsed");
-    };
-
     if parsed_msg.instructions.is_empty() {
         println!("{}", style("No instructions found in transaction").yellow());
         return Ok(());
     }
 
     println!("\n{}", style("PARSED INSTRUCTIONS").green().bold());
-    println!(
-        "{} {}\n",
-        style("Transaction:").dim(),
-        style(signature).cyan()
-    );
 
     // Display each instruction
     for (idx, ui_instruction) in parsed_msg.instructions.iter().enumerate() {
@@ -1013,7 +1002,17 @@ fn display_ata_instruction(ix_type: &str, info: Option<&serde_json::Value>) -> a
             }
             _ => {
                 for (key, value) in info_map {
-                    table.add_row(vec![Cell::new(key), Cell::new(value.to_string())]);
+                    if key == "systemProgram" || key == "tokenProgram" {
+                        continue;
+                    }
+
+                    let display_value = match value {
+                        Value::String(s) => s.clone(),
+                        Value::Object(_) => serde_json::to_string_pretty(value)?,
+                        Value::Array(_) => serde_json::to_string(value)?,
+                        _ => value.to_string(),
+                    };
+                    table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
                 }
             }
         }
@@ -1068,6 +1067,9 @@ fn display_generic_parsed(
 fn display_partially_decoded_instruction(
     partial_ix: &solana_transaction_status::UiPartiallyDecodedInstruction,
 ) -> anyhow::Result<()> {
+    if partial_ix.program_id == COMPUTE_BUDGET_PROGRAM_ID {
+        return display_compute_budget_instruction(&partial_ix.data);
+    }
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
@@ -1088,6 +1090,103 @@ fn display_partially_decoded_instruction(
             Cell::new("Data (Base58)"),
             Cell::new(&partial_ix.data),
         ]);
+
+    println!("{}\n", table);
+    Ok(())
+}
+fn display_compute_budget_instruction(data_base58: &str) -> anyhow::Result<()> {
+    let data = bs58::decode(data_base58).into_vec()?;
+
+    if data.is_empty() {
+        return Ok(());
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
+            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
+        ])
+        .add_row(vec![
+            Cell::new("Program"),
+            Cell::new("Compute Budget Program"),
+        ]);
+
+    match data[0] {
+        0 => {
+            // RequestHeapFrame
+            if data.len() >= 5 {
+                let bytes = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+                table
+                    .add_row(vec![Cell::new("Type"), Cell::new("Request Heap Frame")])
+                    .add_row(vec![
+                        Cell::new("Heap Frame Size"),
+                        Cell::new(format!("{} bytes", bytes)),
+                    ]);
+            }
+        }
+        1 => {
+            // SetComputeUnitLimit
+            if data.len() >= 5 {
+                let units = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+                table
+                    .add_row(vec![Cell::new("Type"), Cell::new("Set Compute Unit Limit")])
+                    .add_row(vec![
+                        Cell::new("Compute Units"),
+                        Cell::new(format!("{}", units)),
+                    ]);
+            }
+        }
+        2 => {
+            // SetComputeUnitPrice
+            // Handle both u64 (9 bytes) and u32 (5 bytes) formats
+            let micro_lamports = if data.len() >= 9 {
+                u64::from_le_bytes([
+                    data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
+                ])
+            } else if data.len() >= 5 {
+                // Pad u32 to u64
+                u64::from_le_bytes([
+                    data[1], data[2], data[3], data[4], 0, 0, 0, 0, // Zero-pad the upper bytes
+                ])
+            } else {
+                0 // Shouldn't happen, but safe fallback
+            };
+
+            table
+                .add_row(vec![Cell::new("Type"), Cell::new("Set Compute Unit Price")])
+                .add_row(vec![
+                    Cell::new("Priority Fee"),
+                    Cell::new(format!("{} micro-lamports/CU", micro_lamports)),
+                ]);
+        }
+        3 => {
+            // SetLoadedAccountsDataSizeLimit
+            if data.len() >= 5 {
+                let bytes = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+                table
+                    .add_row(vec![
+                        Cell::new("Type"),
+                        Cell::new("Set Loaded Accounts Data Size Limit"),
+                    ])
+                    .add_row(vec![
+                        Cell::new("Size Limit"),
+                        Cell::new(format!("{} bytes", bytes)),
+                    ]);
+            }
+        }
+        _ => {
+            // Unknown or future instruction types
+            table
+                .add_row(vec![
+                    Cell::new("Type"),
+                    Cell::new("Unknown Compute Budget Instruction"),
+                ])
+                .add_row(vec![Cell::new("Discriminator"), Cell::new(data[0])])
+                .add_row(vec![Cell::new("Data (Base58)"), Cell::new(data_base58)]);
+        }
+    }
 
     println!("{}\n", table);
     Ok(())
