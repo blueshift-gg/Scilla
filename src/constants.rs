@@ -17,3 +17,5 @@ pub const DEFAULT_EPOCH_LIMIT: usize = 10;
 pub const STAKE_HISTORY_SYSVAR_ADDR: &str = "SysvarStakeHistory1111111111111111111111111";
 
 pub const MEMO_PROGRAM_ID: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+
+pub const CHUNK_SIZE: usize = 900;

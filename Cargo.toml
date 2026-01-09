@@ -24,6 +24,8 @@ chrono = "0.4"
 comfy-table = "7.1"
 dirs = "5.0"
 
+
+
 # solana
 solana-vote-interface = "4"
 solana-instruction = "3"
@@ -46,6 +48,10 @@ base64 = "0.22.1"
 bs58 = "0.5.1"
 solana-transaction-status = "3.1.4"
 solana-system-interface = { version = "3.0.0", features = ["bincode"] }
+solana-loader-v3-interface = {version = "6.1.0", features = ["bincode"]}
+solana-client = "3.1.5"
+solana-connection-cache = "3.1.5"
+solana-tpu-client = "3.1.5"
 
 [dev-dependencies]
 tempfile = "3.8"
