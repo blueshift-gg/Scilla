@@ -3,7 +3,7 @@ use {
         commands::{
             Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
-            vote::VoteCommand,
+            vote::VoteCommand, program::ProgramCommand,
         },
         constants::{DEVNET_RPC, MAINNET_RPC, TESTNET_RPC},
         context::ScillaContext,
@@ -18,6 +18,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
         "Choose a command group:",
         vec![
             CommandGroup::Account,
+            CommandGroup::Program,
             CommandGroup::Cluster,
             CommandGroup::Stake,
             CommandGroup::Vote,
@@ -32,6 +33,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
         CommandGroup::Cluster => Command::Cluster(prompt_cluster()?),
         CommandGroup::Stake => Command::Stake(prompt_stake()?),
         CommandGroup::Account => Command::Account(prompt_account()?),
+        CommandGroup::Program => Command::Program(prompt_program()?),
         CommandGroup::Vote => Command::Vote(prompt_vote()?),
         CommandGroup::ScillaConfig => Command::ScillaConfig(prompt_config()?),
         CommandGroup::Transaction => Command::Transaction(prompt_transaction()?),
@@ -96,6 +98,16 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
         ],
     )
     .with_page_size(10)
+    .prompt()?;
+
+    Ok(choice)
+}
+
+fn prompt_program() -> anyhow::Result<ProgramCommand> {
+    let choice = Select::new(
+        "Program Command:",
+        vec![ProgramCommand::Deploy, ProgramCommand::GoBack],
+    )
     .prompt()?;
 
     Ok(choice)
