@@ -155,7 +155,7 @@ pub fn bincode_deserialize<T>(data: &[u8], ctx: &str) -> anyhow::Result<T>
 where
     T: serde::de::DeserializeOwned,
 {
-    bincode::deserialize::<T>(data).with_context(|| format!("Failed to deserialize {}", ctx))
+    bincode::deserialize::<T>(data).with_context(|| format!("Failed to deserialize {ctx}"))
 }
 
 /// Generic helper to deserialize bincode data with limit and proper error
@@ -168,7 +168,7 @@ where
         .with_fixint_encoding()
         .with_limit(limit)
         .deserialize::<T>(data)
-        .with_context(|| format!("Failed to deserialize {}", ctx))
+        .with_context(|| format!("Failed to deserialize {ctx}"))
 }
 
 pub fn decode_base64(encoded: &str) -> anyhow::Result<Vec<u8>> {
@@ -181,8 +181,7 @@ pub fn decode_base64(encoded: &str) -> anyhow::Result<Vec<u8>> {
         .decode(trimmed)
         .map_err(|e| {
             anyhow::anyhow!(
-                "Failed to decode Base64: {}. Please ensure the data is valid Base64 encoded.",
-                e
+                "Failed to decode Base64: {e}. Please ensure the data is valid Base64 encoded."
             )
         })
 }
@@ -195,8 +194,7 @@ pub fn decode_base58(encoded: &str) -> anyhow::Result<Vec<u8>> {
 
     bs58::decode(trimmed).into_vec().map_err(|e| {
         anyhow::anyhow!(
-            "Failed to decode Base58: {}. Please ensure the data is valid Base58 encoded.",
-            e
+            "Failed to decode Base58: {e}. Please ensure the data is valid Base58 encoded."
         )
     })
 }

@@ -130,7 +130,7 @@ async fn process_check_confirmation(
         .add_row(vec![Cell::new("Status"), Cell::new(status_styled)]);
 
     println!("\n{}", style("TRANSACTION CONFIRMATION").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
@@ -200,7 +200,7 @@ async fn process_fetch_transaction_status(
     ]);
 
     println!("\n{}", style("TRANSACTION STATUS").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }
@@ -252,7 +252,7 @@ async fn process_fetch_transaction(
     }
 
     println!("\n{}", style("TRANSACTION DETAILS").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     let EncodedTransaction::Json(ui_tx) = &tx.transaction.transaction else {
         anyhow::bail!("Transaction encoding is not JSON");
@@ -282,7 +282,7 @@ async fn process_fetch_transaction(
                     Cell::new(&parsed_msg.recent_blockhash),
                 ]);
 
-            println!("{}", msg_table);
+            println!("{msg_table}");
 
             if !parsed_msg.account_keys.is_empty() {
                 println!("\n{}", style("ACCOUNT KEYS").cyan().bold());
@@ -302,7 +302,7 @@ async fn process_fetch_transaction(
                         Cell::new(if account.writable { "✓" } else { "" }),
                     ]);
                 }
-                println!("{}", accounts_table);
+                println!("{accounts_table}");
             }
         }
         UiMessage::Raw(raw_msg) => {
@@ -328,12 +328,12 @@ async fn process_fetch_transaction(
                     Cell::new(&raw_msg.recent_blockhash),
                 ]);
 
-            println!("{}", msg_table);
+            println!("{msg_table}");
 
             if !raw_msg.account_keys.is_empty() {
                 println!("\n{}", style("ACCOUNT KEYS").cyan().bold());
                 for (idx, key) in raw_msg.account_keys.iter().enumerate() {
-                    println!("  {}. {}", idx, key);
+                    println!("  {idx}. {key}");
                 }
             }
         }

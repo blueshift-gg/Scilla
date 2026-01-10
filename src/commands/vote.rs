@@ -368,16 +368,13 @@ async fn close_vote_account(
         .next()
         .filter(|v| v.activated_stake != 0)
     {
-        bail!(
-            "Cannot close vote account with active stake: {}",
-            vote_account_pubkey
-        );
+        bail!("Cannot close vote account with active stake: {vote_account_pubkey}");
     }
 
     let current_balance = ctx.rpc().get_balance(vote_account_pubkey).await?;
 
     if current_balance == 0 {
-        bail!("Vote account {} has zero balance", vote_account_pubkey);
+        bail!("Vote account {vote_account_pubkey} has zero balance");
     }
 
     let withdraw_ix = withdraw(
