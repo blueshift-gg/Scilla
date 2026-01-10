@@ -2,8 +2,8 @@ use {
     crate::{
         commands::{
             Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
-            config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
-            vote::VoteCommand, program::ProgramCommand,
+            config::ConfigCommand, program::ProgramCommand, stake::StakeCommand,
+            transaction::TransactionCommand, vote::VoteCommand,
         },
         constants::{DEVNET_RPC, MAINNET_RPC, TESTNET_RPC},
         context::ScillaContext,

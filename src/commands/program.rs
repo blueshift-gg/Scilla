@@ -14,15 +14,24 @@ use {
         nonblocking::tpu_client::TpuClient,
         rpc_config::RpcSendTransactionConfig,
         send_and_confirm_transactions_in_parallel::{
-            send_and_confirm_transactions_in_parallel_v2, SendAndConfirmConfigV2,
+            SendAndConfirmConfigV2, send_and_confirm_transactions_in_parallel_v2,
         },
     },
     solana_keypair::{Keypair, Signer},
-    solana_loader_v3_interface::{instruction as loader_v3_instruction, state::UpgradeableLoaderState},
+    solana_loader_v3_interface::{
+        instruction as loader_v3_instruction, state::UpgradeableLoaderState,
+    },
     solana_message::Message,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
     solana_tpu_client::tpu_client::TpuClientConfig,
-    std::{fmt, fs::File, io::Read, path::PathBuf, sync::Arc},
+    std::{
+        fmt,
+        fs::File,
+        io::Read,
+        path::{Path, PathBuf},
+        sync::Arc,
+        time::Instant,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -54,6 +63,7 @@ impl ProgramCommand {
             ProgramCommand::Deploy => {
                 let program_path: String = prompt_input_data("Enter path to program .so file:");
                 let keypair_path: String = prompt_input_data("Enter program keypair path:");
+                let immutable = prompt_confirmation("Make program immutable (revoke upgrade authority)?");
 
                 if !prompt_confirmation("Deploy this program?") {
                     println!("{}", style("Deployment cancelled.").yellow());
@@ -62,7 +72,7 @@ impl ProgramCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    deploy_program(ctx, &program_path, &PathBuf::from(&keypair_path)),
+                    deploy_program(ctx, &program_path, &PathBuf::from(&keypair_path), immutable),
                 )
                 .await;
             }
@@ -74,13 +84,16 @@ impl ProgramCommand {
     }
 }
 
-/// Deploy program via TPU/QUIC
+
 async fn deploy_program(
     ctx: &ScillaContext,
     program_path: &str,
-    keypair_path: &std::path::Path,
+    keypair_path: &Path,
+    immutable: bool,
 ) -> anyhow::Result<()> {
-    // 1. Read program binary
+    let start_time = Instant::now();
+
+
     let mut file =
         File::open(program_path).map_err(|e| anyhow!("Failed to open program file: {}", e))?;
     let mut program_data = Vec::new();
@@ -92,11 +105,11 @@ async fn deploy_program(
         style(format!("Program size: {} bytes", program_len)).dim()
     );
 
-    // 2. Load program keypair
+
     let program_keypair = read_keypair_from_path(keypair_path)?;
     let program_id = program_keypair.pubkey();
 
-    // 3. Generate buffer keypair
+
     let buffer_keypair = Keypair::new();
     let buffer_pubkey = buffer_keypair.pubkey();
 
@@ -105,7 +118,7 @@ async fn deploy_program(
         style(format!("Buffer account: {}", buffer_pubkey)).dim()
     );
 
-    // 4. Calculate rent
+
     let buffer_len = UpgradeableLoaderState::size_of_buffer(program_len);
     let buffer_rent = ctx
         .rpc()
@@ -118,7 +131,15 @@ async fn deploy_program(
         .get_minimum_balance_for_rent_exemption(programdata_len)
         .await?;
 
-    // 5. Create buffer account
+    println!(
+        "{} {}\n{} {}",
+        style("Buffer Rent:").dim(),
+        style(format!("{:.9} SOL", buffer_rent as f64 / 1_000_000_000.0)).bold(),
+        style("Program Rent:").dim(),
+        style(format!("{:.9} SOL", programdata_rent as f64 / 1_000_000_000.0)).bold(),
+    );
+
+
     let create_buffer_ix = loader_v3_instruction::create_buffer(
         ctx.pubkey(),
         &buffer_pubkey,
@@ -130,8 +151,7 @@ async fn deploy_program(
     let sig = build_and_send_tx(ctx, &create_buffer_ix, &[ctx.keypair(), &buffer_keypair]).await?;
     println!("{}", style(format!("Buffer created: {}", sig)).green());
 
-    // 6. Create write messages for chunks
-    // Need to create a new RpcClient that is owned (not borrowed)
+
     let rpc_url = ctx.rpc().url();
     let rpc_client = Arc::new(RpcClient::new(rpc_url.to_string()));
     let blockhash = rpc_client.get_latest_blockhash().await?;
@@ -141,7 +161,7 @@ async fn deploy_program(
         let offset = (i * CHUNK_SIZE) as u32;
         let write_ix = loader_v3_instruction::write(
             &buffer_pubkey,
-            ctx.pubkey(), // authority
+            ctx.pubkey(), 
             offset,
             chunk.to_vec(),
         );
@@ -183,7 +203,7 @@ async fn deploy_program(
             &signers,
             SendAndConfirmConfigV2 {
                 resign_txs_count: Some(5),
-                with_spinner: false,  // Disable Solana's spinner, we have our own
+                with_spinner: false, // Disable Solana's spinner, we have our own
                 rpc_send_transaction_config: RpcSendTransactionConfig::default(),
             },
         )
@@ -201,6 +221,9 @@ async fn deploy_program(
     println!("{}", style("Program data written to buffer").green());
 
     // 8. Deploy from buffer
+    // Note: deploy_with_max_program_len is marked deprecated internally but is
+    // the standard way to deploy programs. Loader V4 is not yet enabled on most
+    // clusters.
     #[allow(deprecated)]
     let deploy_ix = loader_v3_instruction::deploy_with_max_program_len(
         ctx.pubkey(),
@@ -218,6 +241,32 @@ async fn deploy_program(
         style("Program deployed successfully!").green().bold(),
         style(format!("Program ID: {}", program_id)).cyan(),
         style(format!("Signature: {}", sig)).dim()
+    );
+
+    if immutable {
+        println!("\n{}", style("Revoking upgrade authority...").yellow());
+        let set_authority_ix = loader_v3_instruction::set_upgrade_authority(
+            &program_id,
+            &ctx.pubkey(),
+            None,
+        );
+        let auth_sig = build_and_send_tx(ctx, &[set_authority_ix], &[ctx.keypair()]).await?;
+        println!(
+            "{}\n{}",
+            style("Program is now immutable.").red().bold(),
+            style(format!("Revocation Signature: {}", auth_sig)).dim()
+        );
+    }
+
+    let duration = start_time.elapsed();
+    println!(
+        "{}",
+        style(format!(
+            "Total deployment time: {:.2}s",
+            duration.as_secs_f64()
+        ))
+        .bold()
+        .green()
     );
 
     Ok(())
