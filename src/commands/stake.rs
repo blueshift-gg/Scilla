@@ -356,7 +356,7 @@ async fn process_create_stake_account(
                 .add_row(vec![Cell::new("Stake State"), Cell::new("Initialized")])
                 .add_row(vec![
                     Cell::new("Rent Exempt Reserve (Lamports)"),
-                    Cell::new(format!("{:.9}", rent_exempt_reserve)),
+                    Cell::new(format!("{rent_exempt_reserve:.9}")),
                 ])
                 .add_row(vec![
                     Cell::new("Stake Authority"),
@@ -456,7 +456,7 @@ async fn delegate_stake_account(
     let stake_authority_pubkey = stake_authority_keypair.pubkey();
 
     if stake_account.owner != stake_program_id() {
-        bail!("Account {} is not a stake account", stake_account_pubkey);
+        bail!("Account {stake_account_pubkey} is not a stake account");
     }
 
     let get_vote_account_config = RpcGetVoteAccountsConfig {
@@ -583,7 +583,7 @@ async fn delegate_stake_account(
                 .add_row(vec![Cell::new("Stake State"), Cell::new("Initialized")])
                 .add_row(vec![
                     Cell::new("Rent Exempt Reserve (Lamports)"),
-                    Cell::new(format!("{:.9}", rent_exempt_reserve)),
+                    Cell::new(format!("{rent_exempt_reserve:.9}")),
                 ])
                 .add_row(vec![
                     Cell::new("Stake Authority"),
@@ -854,9 +854,8 @@ async fn process_merge_stake(
     // checks for unique pubkeys
     if destination_stake_account_pubkey == source_stake_account_pubkey {
         bail!(
-            "Destination Stake Account {} & Source Stake Account {} must not be the same",
-            destination_stake_account_pubkey,
-            source_stake_account_pubkey
+            "Destination Stake Account {destination_stake_account_pubkey} & Source Stake Account \
+             {source_stake_account_pubkey} must not be the same"
         );
     }
 
@@ -943,22 +942,20 @@ async fn process_merge_stake(
         "{}\n{}\n{}\n{}\n{}\n{}",
         style("Stake Merged successfully!").yellow().bold(),
         style(format!(
-            "Destination Stake Account: {}",
-            destination_stake_account_pubkey
+            "Destination Stake Account: {destination_stake_account_pubkey}"
         ))
         .yellow(),
         style(format!(
-            "Source Stake Account: {}",
-            source_stake_account_pubkey
+            "Source Stake Account: {source_stake_account_pubkey}"
         ))
         .yellow(),
-        style(format!("Stake Authority: {}", stake_authority_pubkey)).yellow(),
+        style(format!("Stake Authority: {stake_authority_pubkey}")).yellow(),
         style(format!(
             "After Merge: {} SOL",
             lamports_to_sol(destination_stake_account.lamports)
         ))
         .cyan(),
-        style(format!("Signature: {}", signature)).green()
+        style(format!("Signature: {signature}")).green()
     );
 
     Ok(())
@@ -977,9 +974,8 @@ async fn process_split_stake(
 
     if stake_account_pubkey == split_stake_account_pubkey {
         bail!(
-            "Existing Stake Account {} and New Split Stake Account {} must not be the same",
-            stake_account_pubkey,
-            split_stake_account_pubkey
+            "Existing Stake Account {stake_account_pubkey} and New Split Stake Account \
+             {split_stake_account_pubkey} must not be the same"
         );
     }
 
@@ -987,9 +983,8 @@ async fn process_split_stake(
 
     if lamports < stake_minimum_delegation {
         bail!(
-            "Need at least {} lamports for minimum stake delegation, but you provided {}",
-            stake_minimum_delegation,
-            lamports
+            "Need at least {stake_minimum_delegation} lamports for minimum stake delegation, but \
+             you provided {lamports}"
         );
     }
 
@@ -1005,14 +1000,10 @@ async fn process_split_stake(
     println!(
         "{}\n{}\n{}\n{}\n{}",
         style("Split Stake successfully!").yellow().bold(),
-        style(format!("Stake Account: {}", stake_account_pubkey)).yellow(),
-        style(format!(
-            "Split Stake Account: {}",
-            split_stake_account_pubkey
-        ))
-        .yellow(),
-        style(format!("Stake Authority: {}", stake_authority_pubkey)).yellow(),
-        style(format!("Signature: {}", signature)).green()
+        style(format!("Stake Account: {stake_account_pubkey}")).yellow(),
+        style(format!("Split Stake Account: {split_stake_account_pubkey}")).yellow(),
+        style(format!("Stake Authority: {stake_authority_pubkey}")).yellow(),
+        style(format!("Signature: {signature}")).green()
     );
 
     Ok(())
@@ -1055,7 +1046,7 @@ async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
     }
 
     println!("\n{}", style("CLUSTER STAKE HISTORY").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }

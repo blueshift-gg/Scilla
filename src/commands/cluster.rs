@@ -117,7 +117,7 @@ async fn fetch_epoch_info(ctx: &ScillaContext) -> anyhow::Result<()> {
         ])
         .add_row(vec![
             Cell::new("Epoch Progress"),
-            Cell::new(format!("{:.2}%", epoch_progress)),
+            Cell::new(format!("{epoch_progress:.2}%")),
         ])
         .add_row(vec![
             Cell::new("Slot Index"),
