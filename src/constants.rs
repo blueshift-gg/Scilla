@@ -17,3 +17,14 @@ pub const DEFAULT_EPOCH_LIMIT: usize = 10;
 pub const STAKE_HISTORY_SYSVAR_ADDR: &str = "SysvarStakeHistory1111111111111111111111111";
 
 pub const MEMO_PROGRAM_ID: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+
+/// Maximum chunk size for memo data in bytes.
+///
+/// Solana transactions have a 1232 byte limit. After accounting for:
+/// - Transaction header and signatures (~64-128 bytes)
+/// - Instruction overhead (program ID, account keys, instruction data length)
+/// - Memo program instruction wrapper
+///
+/// We use 900 bytes as a safe maximum to ensure the transaction fits
+/// within limits while leaving room for other instructions if needed.
+pub const CHUNK_SIZE: usize = 900;
