@@ -2,8 +2,8 @@ use {
     crate::{
         commands::{
             Command, CommandGroup, account::AccountCommand, cluster::ClusterCommand,
-            config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
-            vote::VoteCommand,
+            config::ConfigCommand, program::ProgramCommand, stake::StakeCommand,
+            transaction::TransactionCommand, vote::VoteCommand,
         },
         constants::{DEVNET_RPC, MAINNET_RPC, TESTNET_RPC},
         context::ScillaContext,
@@ -21,6 +21,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
             CommandGroup::Cluster,
             CommandGroup::Stake,
             CommandGroup::Vote,
+            CommandGroup::Program,
             CommandGroup::Transaction,
             CommandGroup::ScillaConfig,
             CommandGroup::Exit,
@@ -33,6 +34,7 @@ pub fn prompt_for_command() -> anyhow::Result<Command> {
         CommandGroup::Stake => Command::Stake(prompt_stake()?),
         CommandGroup::Account => Command::Account(prompt_account()?),
         CommandGroup::Vote => Command::Vote(prompt_vote()?),
+        CommandGroup::Program => Command::Program(prompt_program()?),
         CommandGroup::ScillaConfig => Command::ScillaConfig(prompt_config()?),
         CommandGroup::Transaction => Command::Transaction(prompt_transaction()?),
         CommandGroup::Exit => Command::Exit,
@@ -112,6 +114,16 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
             VoteCommand::CloseVoteAccount,
             VoteCommand::GoBack,
         ],
+    )
+    .prompt()?;
+
+    Ok(choice)
+}
+
+fn prompt_program() -> anyhow::Result<ProgramCommand> {
+    let choice = Select::new(
+        "Program Command:",
+        vec![ProgramCommand::Extend, ProgramCommand::GoBack],
     )
     .prompt()?;
 
