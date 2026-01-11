@@ -57,4 +57,5 @@ solana-signature = "3.1.0"
 solana-nonce = "3.0.0"
 solana-transaction-status = "3.1.4"
 solana-system-interface = { version = "3.0.0", features = ["bincode"] }
+solana-loader-v3-interface = { version = "3", features = ["bincode"] }
 solana-account-decoder = "3.1.6"
