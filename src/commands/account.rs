@@ -14,12 +14,12 @@ use {
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
     solana_system_interface::instruction::transfer,
-    std::fmt,
-    spl_associated_token_account::{get_associated_token_address,instruction::create_associated_token_account},
     solana_transaction::Transaction,
-    spl_token_interface::{
-        id as token_program_id,
+    spl_associated_token_account::{
+        get_associated_token_address, instruction::create_associated_token_account,
     },
+    spl_token_interface::id as token_program_id,
+    std::fmt,
 };
 
 /// Commands related to wallet or account management
@@ -103,9 +103,7 @@ impl AccountCommand {
             AccountCommand::GetAta => {
                 let mint: Pubkey = prompt_input_data("Enter mint pubkey:");
                 let owner: Pubkey = prompt_input_data("Enter owner pubkey:");
-                
-                // Call get_ata which handles everything including the prompt
-                // Don't wrap with show_spinner to allow interactive prompts
+
                 if let Err(e) = get_ata(ctx, mint, owner).await {
                     print_error(format!("Error: {}", e));
                 }
@@ -418,12 +416,13 @@ async fn get_ata(ctx: &ScillaContext, mint: Pubkey, owner: Pubkey) -> anyhow::Re
 async fn create_ata(ctx: &ScillaContext, mint: Pubkey, owner: Pubkey) -> anyhow::Result<()> {
     let ata = get_associated_token_address(&owner, &mint);
 
-    let instruction = create_associated_token_account(&ctx.pubkey(), &owner, &mint, &token_program_id());
+    let instruction =
+        create_associated_token_account(ctx.pubkey(), &owner, &mint, &token_program_id());
     let latest_blockhash = ctx.rpc().get_latest_blockhash().await?;
 
     let transaction = Transaction::new_signed_with_payer(
-        &[instruction.clone()],
-        Some(&ctx.pubkey()),
+        &[instruction],
+        Some(ctx.pubkey()),
         &[&ctx.keypair()],
         latest_blockhash,
     );
