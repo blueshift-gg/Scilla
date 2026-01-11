@@ -1981,6 +1981,7 @@ dependencies = [
  "solana-transaction",
  "solana-transaction-status",
  "solana-vote-interface",
+ "spl-associated-token-account",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
@@ -3314,6 +3315,32 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
+]
+
+[[package]]
+name = "spl-associated-token-account"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0242277e290c023de8826f504abcf9206b3cd4e18d9ace4ec59a698b2828e88b"
+dependencies = [
+ "borsh",
+ "num-derive",
+ "num-traits",
+ "solana-account-info",
+ "solana-cpi",
+ "solana-instruction",
+ "solana-msg",
+ "solana-program-entrypoint",
+ "solana-program-error",
+ "solana-pubkey 3.0.0",
+ "solana-rent",
+ "solana-sdk-ids",
+ "solana-system-interface 2.0.0",
+ "solana-sysvar",
+ "spl-associated-token-account-interface",
+ "spl-token-2022-interface",
+ "spl-token-interface",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

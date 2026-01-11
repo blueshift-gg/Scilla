@@ -15,6 +15,7 @@ use {
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
     solana_system_interface::instruction::transfer,
     std::fmt,
+    spl_associated_token_account::get_associated_token_address,
 };
 
 /// Commands related to wallet or account management
@@ -27,6 +28,7 @@ pub enum AccountCommand {
     LargestAccounts,
     NonceAccount,
     Rent,
+    GetAta,
     GoBack,
 }
 
@@ -40,6 +42,7 @@ impl AccountCommand {
             AccountCommand::LargestAccounts => "Fetching largest accounts on the cluster…",
             AccountCommand::NonceAccount => "Inspecting or managing durable nonces…",
             AccountCommand::Rent => "Checking rent…",
+            AccountCommand::GetAta => "Getting associated token account…",
             AccountCommand::GoBack => "Going back…",
         }
     }
@@ -55,6 +58,7 @@ impl fmt::Display for AccountCommand {
             AccountCommand::LargestAccounts => "View largest accounts",
             AccountCommand::NonceAccount => "View nonce account",
             AccountCommand::Rent => "Check rent",
+            AccountCommand::GetAta => "Check associated token account",
             AccountCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
@@ -91,6 +95,11 @@ impl AccountCommand {
                 // get the rent for data bytes used in account
                 let bytes: usize = prompt_input_data("Enter data size in bytes:");
                 show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
+            }
+            AccountCommand::GetAta => {
+                let mint: Pubkey = prompt_input_data("Enter mint pubkey:");
+                let owner: Pubkey = prompt_input_data("Enter owner pubkey:");
+                show_spinner(self.spinner_msg(), get_ata(ctx, mint, owner)).await;
             }
             AccountCommand::GoBack => {
                 return CommandFlow::GoBack;
@@ -333,6 +342,49 @@ async fn fetch_rent(ctx: &ScillaContext, bytes: usize) -> anyhow::Result<()> {
 
     println!("\n{}", style("RENT EXEMPTION").green().bold());
     println!("{table}");
+
+    Ok(())
+}
+
+async fn get_ata(ctx: &ScillaContext, mint: Pubkey, owner: Pubkey) -> anyhow::Result<()> {
+    let ata = get_associated_token_address(&owner, &mint);
+
+    println!("\n{} {}", style("ATA").green().bold(), style(format!("{}", ata)).cyan());
+    let acc = ctx.rpc().get_account(&ata).await?;
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Field")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Value")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+        ])
+        .add_row(vec![
+            Cell::new("Lamports"),
+            Cell::new(format!("{}", lamports_to_sol(acc.lamports))),
+        ])
+        .add_row(vec![
+            Cell::new("Data Length"),
+            Cell::new(format!("{}", acc.data.len())),
+        ])
+        .add_row(vec![
+            Cell::new("Owner"),
+            Cell::new(format!("{}", acc.owner)),
+        ])
+        .add_row(vec![
+            Cell::new("Executable"),
+            Cell::new(format!("{}", acc.executable)),
+        ])
+        .add_row(vec![
+            Cell::new("Rent Epoch"),
+            Cell::new(format!("{}", acc.rent_epoch)),
+        ]);
+
+    println!("{}\n{}", style("ACCOUNT INFO").green().bold(), table);
 
     Ok(())
 }

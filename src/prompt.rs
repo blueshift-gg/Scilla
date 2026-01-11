@@ -92,6 +92,7 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
             AccountCommand::LargestAccounts,
             AccountCommand::NonceAccount,
             AccountCommand::Rent,
+            AccountCommand::GetAta,
             AccountCommand::GoBack,
         ],
     )
