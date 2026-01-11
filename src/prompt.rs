@@ -5,6 +5,7 @@ use {
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
             vote::VoteCommand,
         },
+        constants::{DEVNET_RPC, MAINNET_RPC, TESTNET_RPC},
         context::ScillaContext,
         ui::print_error,
     },
@@ -234,4 +235,40 @@ pub fn prompt_keypair_path(msg: &str, ctx: &ScillaContext) -> PathBuf {
 
 pub fn prompt_confirmation(msg: &str) -> bool {
     Confirm::new(msg).prompt().unwrap_or(false)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Network {
+    Mainnet,
+    Testnet,
+    Devnet,
+}
+
+impl std::fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Network::Mainnet => write!(f, "Mainnet"),
+            Network::Testnet => write!(f, "Testnet"),
+            Network::Devnet => write!(f, "Devnet"),
+        }
+    }
+}
+
+impl Network {
+    fn rpc_url(&self) -> &'static str {
+        match self {
+            Network::Mainnet => MAINNET_RPC,
+            Network::Testnet => TESTNET_RPC,
+            Network::Devnet => DEVNET_RPC,
+        }
+    }
+
+    fn all() -> Vec<Network> {
+        vec![Network::Mainnet, Network::Testnet, Network::Devnet]
+    }
+}
+
+pub fn prompt_network_rpc_url() -> anyhow::Result<String> {
+    let network = Select::new("Select network:", Network::all()).prompt()?;
+    Ok(network.rpc_url().to_string())
 }
