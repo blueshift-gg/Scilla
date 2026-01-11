@@ -47,6 +47,7 @@ bs58 = "0.5.1"
 solana-transaction-status = "3.1.4"
 solana-system-interface = { version = "3.0.0", features = ["bincode"] }
 spl-associated-token-account = "8.0.0"
+spl-token-interface = "2.0.0"
 
 [dev-dependencies]
 tempfile = "3.8"

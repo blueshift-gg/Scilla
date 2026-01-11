@@ -1982,6 +1982,7 @@ dependencies = [
  "solana-transaction-status",
  "solana-vote-interface",
  "spl-associated-token-account",
+ "spl-token-interface",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",

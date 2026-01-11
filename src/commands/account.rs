@@ -9,13 +9,17 @@ use {
     anyhow::bail,
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
-    inquire::Select,
+    inquire::{Confirm, Select},
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
     solana_system_interface::instruction::transfer,
     std::fmt,
-    spl_associated_token_account::get_associated_token_address,
+    spl_associated_token_account::{get_associated_token_address,instruction::create_associated_token_account},
+    solana_transaction::Transaction,
+    spl_token_interface::{
+        id as token_program_id,
+    },
 };
 
 /// Commands related to wallet or account management
@@ -99,7 +103,12 @@ impl AccountCommand {
             AccountCommand::GetAta => {
                 let mint: Pubkey = prompt_input_data("Enter mint pubkey:");
                 let owner: Pubkey = prompt_input_data("Enter owner pubkey:");
-                show_spinner(self.spinner_msg(), get_ata(ctx, mint, owner)).await;
+                
+                // Call get_ata which handles everything including the prompt
+                // Don't wrap with show_spinner to allow interactive prompts
+                if let Err(e) = get_ata(ctx, mint, owner).await {
+                    print_error(format!("Error: {}", e));
+                }
             }
             AccountCommand::GoBack => {
                 return CommandFlow::GoBack;
@@ -345,46 +354,86 @@ async fn fetch_rent(ctx: &ScillaContext, bytes: usize) -> anyhow::Result<()> {
 
     Ok(())
 }
-
+/// Returns true if ATA exists and was displayed, false if not found
 async fn get_ata(ctx: &ScillaContext, mint: Pubkey, owner: Pubkey) -> anyhow::Result<()> {
     let ata = get_associated_token_address(&owner, &mint);
 
     println!("\n{} {}", style("ATA").green().bold(), style(format!("{}", ata)).cyan());
-    let acc = ctx.rpc().get_account(&ata).await?;
 
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field")
-                .add_attribute(comfy_table::Attribute::Bold)
-                .fg(comfy_table::Color::Cyan),
-            Cell::new("Value")
-                .add_attribute(comfy_table::Attribute::Bold)
-                .fg(comfy_table::Color::Cyan),
-        ])
-        .add_row(vec![
-            Cell::new("Lamports"),
-            Cell::new(format!("{}", lamports_to_sol(acc.lamports))),
-        ])
-        .add_row(vec![
-            Cell::new("Data Length"),
-            Cell::new(format!("{}", acc.data.len())),
-        ])
-        .add_row(vec![
-            Cell::new("Owner"),
-            Cell::new(format!("{}", acc.owner)),
-        ])
-        .add_row(vec![
-            Cell::new("Executable"),
-            Cell::new(format!("{}", acc.executable)),
-        ])
-        .add_row(vec![
-            Cell::new("Rent Epoch"),
-            Cell::new(format!("{}", acc.rent_epoch)),
-        ]);
+    match ctx.rpc().get_account(&ata).await {
+        Ok(acc) => {
+            let mut table = Table::new();
+            table
+                .load_preset(UTF8_FULL)
+                .set_header(vec![
+                    Cell::new("Field")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
+                    Cell::new("Value")
+                        .add_attribute(comfy_table::Attribute::Bold)
+                        .fg(comfy_table::Color::Cyan),
+                ])
+                .add_row(vec![
+                    Cell::new("Lamports"),
+                    Cell::new(format!("{}", lamports_to_sol(acc.lamports))),
+                ])
+                .add_row(vec![
+                    Cell::new("Data Length"),
+                    Cell::new(format!("{}", acc.data.len())),
+                ])
+                .add_row(vec![
+                    Cell::new("Owner"),
+                    Cell::new(format!("{}", acc.owner)),
+                ])
+                .add_row(vec![
+                    Cell::new("Executable"),
+                    Cell::new(format!("{}", acc.executable)),
+                ])
+                .add_row(vec![
+                    Cell::new("Rent Epoch"),
+                    Cell::new(format!("{}", acc.rent_epoch)),
+                ]);
 
-    println!("{}\n{}", style("ACCOUNT INFO").green().bold(), table);
+            println!("{}\n{}", style("ACCOUNT INFO").green().bold(), table);
+            Ok(())
+        }
+        Err(_e) => {
+            println!("{}", style("ATA not found").yellow());
 
+            let choice = Confirm::new("Do you want to create the ATA?")
+                .with_default(true)
+                .prompt()?;
+
+            if choice {
+                create_ata(ctx, mint, owner).await?;
+            } else {
+                println!("{}", style("ATA creation cancelled").yellow());
+            }
+
+            Ok(())
+        }
+    }
+}
+
+async fn create_ata(ctx: &ScillaContext, mint: Pubkey, owner: Pubkey) -> anyhow::Result<()> {
+    let ata = get_associated_token_address(&mint, &owner);
+    
+    println!("{}", style("ATA created successfully").green().bold());
+    println!("{}", style(format!("ATA: {}", ata)).cyan());
+    println!("{}", style(format!("Fund: {}", ctx.pubkey())).cyan());
+
+    let instruction = create_associated_token_account(&ctx.pubkey(), &owner, &mint, &token_program_id());
+    let latest_blockhash = ctx.rpc().get_latest_blockhash().await?;
+
+    let transaction = Transaction::new_signed_with_payer(
+        &[instruction.clone()],
+        Some(&ctx.pubkey()),    
+        &[&ctx.keypair()],
+        latest_blockhash,
+    );
+
+    let signature = ctx.rpc().send_transaction(&transaction).await?;
+
+    println!("{}", style(format!("Transaction Signature: {}", signature)).yellow());
     Ok(())
 }
