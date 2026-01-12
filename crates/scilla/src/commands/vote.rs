@@ -23,7 +23,7 @@ use {
 };
 
 /// Commands related to validator/vote account operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum VoteCommand {
     CreateVoteAccount,
     AuthorizeVoter,

@@ -272,3 +272,15 @@ pub fn prompt_network_rpc_url() -> anyhow::Result<String> {
     let network = Select::new("Select network:", Network::all()).prompt()?;
     Ok(network.rpc_url().to_string())
 }
+
+pub fn prompt_section(section: &CommandGroup) -> anyhow::Result<Command> {
+    match section {
+        CommandGroup::Cluster => Ok(Command::Cluster(prompt_cluster()?)),
+        CommandGroup::Stake => Ok(Command::Stake(prompt_stake()?)),
+        CommandGroup::Account => Ok(Command::Account(prompt_account()?)),
+        CommandGroup::Vote => Ok(Command::Vote(prompt_vote()?)),
+        CommandGroup::Transaction => Ok(Command::Transaction(prompt_transaction()?)),
+        CommandGroup::ScillaConfig => Ok(Command::ScillaConfig(prompt_config()?)),
+        CommandGroup::Exit => Ok(Command::Exit),
+    }
+}

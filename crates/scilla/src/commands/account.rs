@@ -18,7 +18,7 @@ use {
 };
 
 /// Commands related to wallet or account management
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum AccountCommand {
     FetchAccount,
     Balance,

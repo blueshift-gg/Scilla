@@ -36,7 +36,7 @@ use {
 };
 
 /// Commands related to staking operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum StakeCommand {
     Create,
     Delegate,

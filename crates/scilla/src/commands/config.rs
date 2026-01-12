@@ -16,7 +16,7 @@ use {
 };
 
 /// Commands related to configuration like RPC_URL , KEYAPAIR_PATH etc
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ConfigCommand {
     Show,
     Edit,

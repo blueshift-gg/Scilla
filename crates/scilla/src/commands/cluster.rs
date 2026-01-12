@@ -9,7 +9,7 @@ use {
 };
 
 /// Commands related to cluster operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ClusterCommand {
     EpochInfo,
     CurrentSlot,

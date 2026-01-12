@@ -34,7 +34,7 @@ impl<T> Termination for CommandFlow<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Command {
     Cluster(ClusterCommand),
     Stake(StakeCommand),
@@ -59,9 +59,22 @@ impl Command {
             Command::Exit => CommandFlow::Exit,
         }
     }
+
+    /// Returns the section (CommandGroup) this command belongs to
+    pub fn section(&self) -> CommandGroup {
+        match self {
+            Command::Cluster(_) => CommandGroup::Cluster,
+            Command::Stake(_) => CommandGroup::Stake,
+            Command::Account(_) => CommandGroup::Account,
+            Command::Vote(_) => CommandGroup::Vote,
+            Command::Transaction(_) => CommandGroup::Transaction,
+            Command::ScillaConfig(_) => CommandGroup::ScillaConfig,
+            Command::Exit => CommandGroup::Exit,
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum CommandGroup {
     Account,
     Cluster,

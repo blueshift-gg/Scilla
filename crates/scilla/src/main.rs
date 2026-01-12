@@ -1,7 +1,10 @@
 use {
     crate::{
-        commands::CommandFlow, config::ScillaConfig, context::ScillaContext, error::ScillaResult,
-        prompt::prompt_for_command,
+        commands::CommandFlow,
+        config::ScillaConfig,
+        context::ScillaContext,
+        error::ScillaResult,
+        prompt::{prompt_for_command, prompt_section},
     },
     console::style,
 };
@@ -27,15 +30,29 @@ async fn main() -> ScillaResult<()> {
     let config = ScillaConfig::load()?;
     let mut ctx = ScillaContext::try_from(config)?;
 
+    let mut command = prompt_for_command()?;
+    ctx.nav().set_root(command.section());
+
     loop {
-        let command = prompt_for_command()?;
-
-        let res = command.process_command(&mut ctx).await;
-
-        match res {
-            CommandFlow::Process(_) => continue,
-            CommandFlow::GoBack => continue,
-            CommandFlow::Exit => break,
+        match command.process_command(&mut ctx).await {
+            CommandFlow::Process(_) => {
+                let current = ctx
+                    .nav()
+                    .current()
+                    .expect("Navigation stack should have root");
+                command = prompt_section(&current)?;
+            }
+            CommandFlow::GoBack => {
+                if let Some(parent) = ctx.nav().pop() {
+                    command = prompt_section(&parent)?;
+                } else {
+                    command = prompt_for_command()?;
+                    ctx.nav().set_root(command.section());
+                }
+            }
+            CommandFlow::Exit => {
+                break;
+            }
         }
     }
 
