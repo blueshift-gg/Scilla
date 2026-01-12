@@ -16,6 +16,7 @@ use {
 pub mod account;
 pub mod cluster;
 pub mod config;
+pub mod program;
 pub mod stake;
 pub mod transaction;
 pub mod vote;

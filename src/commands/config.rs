@@ -83,7 +83,7 @@ pub enum UICommitmentOptions {
 impl fmt::Display for UICommitmentOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UICommitmentOptions::Level(level) => write!(f, "{:?}", level),
+            UICommitmentOptions::Level(level) => write!(f, "{level:?}"),
             UICommitmentOptions::None => write!(f, "None"),
         }
     }
@@ -142,7 +142,7 @@ fn show_config(ctx: &ScillaContext) -> anyhow::Result<()> {
         .add_row(vec![Cell::new("Keypair Path"), Cell::new(keypair_display)]);
 
     println!("\n{}", style("SCILLA CONFIG").green().bold());
-    println!("{}", table);
+    println!("{table}");
 
     Ok(())
 }

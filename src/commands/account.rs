@@ -293,9 +293,9 @@ async fn transfer_sol(
     println!(
         "\n{} {}\n{}\n{}",
         style("Transfer successful!").green().bold(),
-        style(format!("Amount: {} SOL", amount_sol)).cyan(),
-        style(format!("Signature: {}", signature)).yellow(),
-        style(format!("Recipient Address: {}", receiver)).yellow()
+        style(format!("Amount: {amount_sol} SOL")).cyan(),
+        style(format!("Signature: {signature}")).yellow(),
+        style(format!("Recipient Address: {receiver}")).yellow()
     );
 
     Ok(())
@@ -320,11 +320,11 @@ async fn fetch_rent(ctx: &ScillaContext, bytes: usize) -> anyhow::Result<()> {
         ])
         .add_row(vec![
             Cell::new("Data Size"),
-            Cell::new(format!("{} bytes", bytes)),
+            Cell::new(format!("{bytes} bytes")),
         ])
         .add_row(vec![
             Cell::new("Minimum Balance (lamports)"),
-            Cell::new(format!("{}", min_balance)),
+            Cell::new(format!("{min_balance}")),
         ])
         .add_row(vec![
             Cell::new("Minimum Balance (SOL)"),
