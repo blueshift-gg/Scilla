@@ -17,7 +17,7 @@ pub struct ScillaContext {
 }
 
 /// Creates RPC client, keypair, pubkey from config
-fn create_rpc_and_keypair(config: &ScillaConfig) -> anyhow::Result<(RpcClient, Keypair, Pubkey)> {
+fn create_rpc_and_keypair(config: &ScillaConfig) -> anyhow::Result<(RpcClient, Keypair)> {
     let rpc_client = RpcClient::new_with_commitment(
         config.rpc_url.clone(),
         CommitmentConfig {
@@ -33,9 +33,7 @@ fn create_rpc_and_keypair(config: &ScillaConfig) -> anyhow::Result<(RpcClient, K
         )
     })?;
 
-    let pubkey = keypair.pubkey();
-
-    Ok((rpc_client, keypair, pubkey))
+    Ok((rpc_client, keypair))
 }
 
 impl ScillaContext {
@@ -56,7 +54,9 @@ impl ScillaContext {
     }
 
     pub fn reload(&mut self, new_config: ScillaConfig) -> anyhow::Result<()> {
-        let (rpc_client, keypair, pubkey) = create_rpc_and_keypair(&new_config)?;
+        let (rpc_client, keypair) = create_rpc_and_keypair(&new_config)?;
+
+        let pubkey = keypair.pubkey();
 
         // Preserve navigation context, only update RPC/keypair
         self.rpc_client = rpc_client;
@@ -76,7 +76,8 @@ impl TryFrom<ScillaConfig> for ScillaContext {
     type Error = anyhow::Error;
 
     fn try_from(config: ScillaConfig) -> anyhow::Result<Self> {
-        let (rpc_client, keypair, pubkey) = create_rpc_and_keypair(&config)?;
+        let (rpc_client, keypair) = create_rpc_and_keypair(&config)?;
+        let pubkey = keypair.pubkey();
 
         Ok(Self {
             rpc_client,
