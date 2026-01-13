@@ -7,7 +7,7 @@ use {
         prompt::{prompt_confirmation, prompt_input_data},
         ui::show_spinner,
     },
-    anyhow::{anyhow, bail},
+    anyhow::{anyhow, bail, Context},
     async_trait::async_trait,
     console::style,
     solana_keypair::{Keypair, Signer},
@@ -98,8 +98,33 @@ async fn deploy_program(
 ) -> anyhow::Result<()> {
     let start_time = Instant::now();
 
-    let mut file =
-        File::open(program_path).map_err(|e| anyhow!("Failed to open program file: {}", e))?;
+    // Check if program file exists
+    let program_path_buf = PathBuf::from(program_path);
+    if !program_path_buf.exists() {
+        bail!(
+            "Program file not found at '{}'\n\nPlease check:\n  1. The file path is correct\n  2. The file exists\n  3. You have read permissions\n\nCurrent working directory: {}",
+            program_path,
+            std::env::current_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "unknown".to_string())
+        );
+    }
+
+    if !program_path.ends_with(".so") {
+        println!(
+            "{}",
+            style(format!(
+                "Warning: File '{}' doesn't have .so extension",
+                program_path
+            ))
+            .yellow()
+        );
+    }
+
+    let mut file = File::open(program_path).context(format!(
+        "Failed to open program file at '{}'",
+        program_path
+    ))?;
     let mut program_data = Vec::new();
     file.read_to_end(&mut program_data)?;
     let program_len = program_data.len();
