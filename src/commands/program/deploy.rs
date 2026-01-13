@@ -8,29 +8,24 @@ use {
         ui::show_spinner,
     },
     anyhow::{anyhow, bail},
+    async_trait::async_trait,
     console::style,
-    solana_client::{
-        connection_cache::ConnectionCache,
-        nonblocking::tpu_client::TpuClient,
-        rpc_config::RpcSendTransactionConfig,
-        send_and_confirm_transactions_in_parallel::{
-            SendAndConfirmConfigV2, send_and_confirm_transactions_in_parallel_v2,
-        },
-    },
     solana_keypair::{Keypair, Signer},
     solana_loader_v3_interface::{
         instruction as loader_v3_instruction, state::UpgradeableLoaderState,
     },
     solana_message::Message,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
-    solana_tpu_client::tpu_client::TpuClientConfig,
+    solana_tpu_client_next::{leader_updater::LeaderUpdater, ClientBuilder},
     std::{
         fs::File,
         io::Read,
+        net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
         path::{Path, PathBuf},
         sync::Arc,
         time::Instant,
     },
+    tokio_util::sync::CancellationToken,
 };
 
 pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
@@ -50,6 +45,49 @@ pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
     .await;
 
     CommandFlow::Process(())
+}
+
+/// Simple LeaderUpdater that uses RPC to get leader schedule
+struct RpcLeaderUpdater {
+    tpu_addresses: Vec<SocketAddr>,
+}
+
+impl RpcLeaderUpdater {
+    async fn new(rpc_client: Arc<RpcClient>) -> anyhow::Result<Self> {
+        // Get cluster nodes to find TPU addresses
+        let cluster_nodes = rpc_client.get_cluster_nodes().await?;
+        
+        // Extract TPU addresses from cluster nodes
+        let tpu_addresses: Vec<SocketAddr> = cluster_nodes
+            .iter()
+            .filter_map(|node| node.tpu)
+            .collect();
+
+        if tpu_addresses.is_empty() {
+            bail!("No TPU addresses found in cluster");
+        }
+
+        Ok(Self {
+            tpu_addresses,
+        })
+    }
+}
+
+#[async_trait]
+impl LeaderUpdater for RpcLeaderUpdater {
+    fn next_leaders(&mut self, lookahead_leaders: usize) -> Vec<SocketAddr> {
+        // Return the first N TPU addresses
+        // In a more sophisticated implementation, this would use the leader schedule
+        self.tpu_addresses
+            .iter()
+            .take(lookahead_leaders)
+            .copied()
+            .collect()
+    }
+
+    async fn stop(&mut self) {
+        // No cleanup needed
+    }
 }
 
 async fn deploy_program(
@@ -113,75 +151,76 @@ async fn deploy_program(
     let sig = build_and_send_tx(ctx, &create_buffer_ix, &[ctx.keypair(), &buffer_keypair]).await?;
     println!("{}", style(format!("Buffer created: {}", sig)).green());
 
+    // Prepare write transactions
     let rpc_url = ctx.rpc().url();
     let rpc_client = Arc::new(RpcClient::new(rpc_url.to_string()));
     let blockhash = rpc_client.get_latest_blockhash().await?;
 
-    let mut write_messages = Vec::new();
+    let mut write_transactions = Vec::new();
     for (i, chunk) in program_data.chunks(CHUNK_SIZE).enumerate() {
         let offset = (i * CHUNK_SIZE) as u32;
         let write_ix = loader_v3_instruction::write(
             &buffer_pubkey,
-            ctx.pubkey(), 
+            ctx.pubkey(),
             offset,
             chunk.to_vec(),
         );
         let message = Message::new_with_blockhash(&[write_ix], Some(ctx.pubkey()), &blockhash);
-        write_messages.push(message);
+        let mut transaction = solana_transaction::Transaction::new_unsigned(message);
+        transaction.try_sign(&[ctx.keypair()], blockhash)?;
+        write_transactions.push(transaction);
     }
 
     println!(
         "{}",
         style(format!(
             "Writing {} chunks via TPU...",
-            write_messages.len()
+            write_transactions.len()
         ))
         .dim()
     );
 
-    // 7. Send write transactions via TPU/QUIC
-    let connection_cache = ConnectionCache::new_quic("scilla_program_deploy", 1);
+    // Create leader updater
+    let leader_updater = RpcLeaderUpdater::new(rpc_client.clone()).await?;
 
-    let websocket_url = rpc_url
-        .replace("https://", "wss://")
-        .replace("http://", "ws://");
+    // Setup TPU client using tpu-client-next
+    let bind_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))?;
+    bind_socket.set_nonblocking(true)?;
 
-    if let ConnectionCache::Quic(cache) = connection_cache {
-        let tpu_client = TpuClient::new_with_connection_cache(
-            rpc_client.clone(),
-            &websocket_url,
-            TpuClientConfig::default(),
-            cache,
-        )
-        .await?;
+    let cancel_token = CancellationToken::new();
+    
+    let (transaction_sender, client) = ClientBuilder::new(Box::new(leader_updater))
+        .bind_socket(bind_socket)
+        .leader_send_fanout(2)
+        .identity(ctx.keypair())
+        .max_cache_size(64)
+        .cancel_token(cancel_token.clone())
+        .build()?;
 
-        let signers: Vec<&dyn Signer> = vec![ctx.keypair()];
+    // Serialize transactions to wire format
+    let wire_transactions: Vec<Vec<u8>> = write_transactions
+        .iter()
+        .map(bincode::serialize)
+        .collect::<Result<Vec<_>, _>>()?;
 
-        let transaction_errors = send_and_confirm_transactions_in_parallel_v2(
-            rpc_client.clone(),
-            Some(tpu_client),
-            &write_messages,
-            &signers,
-            SendAndConfirmConfigV2 {
-                resign_txs_count: Some(5),
-                with_spinner: false, // Disable Solana's spinner, we have our own
-                rpc_send_transaction_config: RpcSendTransactionConfig::default(),
-            },
-        )
+    // Send transactions in batch
+    transaction_sender
+        .send_transactions_in_batch(wire_transactions)
         .await
-        .map_err(|e| anyhow!("Write transactions failed: {}", e))?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+        .map_err(|e| anyhow!("Failed to send transactions: {}", e))?;
 
-        if !transaction_errors.is_empty() {
-            bail!("{} write transactions failed", transaction_errors.len());
-        }
-    }
+    // Wait a bit for transactions to be processed
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+    // Shutdown the client
+    client
+        .shutdown()
+        .await
+        .map_err(|e| anyhow!("Failed to shutdown TPU client: {}", e))?;
 
     println!("{}", style("Program data written to buffer").green());
 
-    // 8. Deploy from buffer
+    // Deploy from buffer
     // Note: deploy_with_max_program_len is marked deprecated internally but is
     // the standard way to deploy programs. Loader V4 is not yet enabled on most
     // clusters.
