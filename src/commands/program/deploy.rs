@@ -8,6 +8,7 @@ use {
         ui::show_spinner,
     },
     anyhow::{bail, Context},
+    async_trait::async_trait,
     console::style,
     solana_keypair::{Keypair, Signer},
     solana_loader_v3_interface::{
@@ -15,13 +16,16 @@ use {
     },
     solana_message::Message,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
+    solana_tpu_client_next::{leader_updater::LeaderUpdater, ClientBuilder},
     std::{
         fs::File,
         io::Read,
+        net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
         path::{Path, PathBuf},
         sync::Arc,
         time::Instant,
     },
+    tokio_util::sync::CancellationToken,
 };
 
 pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
@@ -35,12 +39,55 @@ pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
     }
 
     show_spinner(
-        "Deploying program via TPU...",
+        "Deploying program via TPU/QUIC...",
         deploy_program(ctx, &program_path, &PathBuf::from(&keypair_path), immutable),
     )
     .await;
 
     CommandFlow::Process(())
+}
+
+/// Simple LeaderUpdater that uses RPC to get leader schedule
+struct RpcLeaderUpdater {
+    tpu_addresses: Vec<SocketAddr>,
+}
+
+impl RpcLeaderUpdater {
+    async fn new(rpc_client: Arc<RpcClient>) -> anyhow::Result<Self> {
+        // Get cluster nodes to find TPU addresses
+        let cluster_nodes = rpc_client.get_cluster_nodes().await?;
+        
+        // Extract TPU addresses from cluster nodes
+        let tpu_addresses: Vec<SocketAddr> = cluster_nodes
+            .iter()
+            .filter_map(|node| node.tpu)
+            .collect();
+
+        if tpu_addresses.is_empty() {
+            bail!("No TPU addresses found in cluster");
+        }
+
+        Ok(Self {
+            tpu_addresses,
+        })
+    }
+}
+
+#[async_trait]
+impl LeaderUpdater for RpcLeaderUpdater {
+    fn next_leaders(&mut self, lookahead_leaders: usize) -> Vec<SocketAddr> {
+        // Return the first N TPU addresses
+        // In a more sophisticated implementation, this would use the leader schedule
+        self.tpu_addresses
+            .iter()
+            .take(lookahead_leaders)
+            .copied()
+            .collect()
+    }
+
+    async fn stop(&mut self) {
+        // No cleanup needed
+    }
 }
 
 async fn deploy_program(
@@ -135,6 +182,8 @@ async fn deploy_program(
     let blockhash = rpc_client.get_latest_blockhash().await?;
 
     let mut write_transactions = Vec::new();
+    let mut write_signatures = Vec::new();
+    
     for (i, chunk) in program_data.chunks(CHUNK_SIZE).enumerate() {
         let offset = (i * CHUNK_SIZE) as u32;
         let write_ix = loader_v3_instruction::write(
@@ -146,33 +195,111 @@ async fn deploy_program(
         let message = Message::new_with_blockhash(&[write_ix], Some(ctx.pubkey()), &blockhash);
         let mut transaction = solana_transaction::Transaction::new_unsigned(message);
         transaction.try_sign(&[ctx.keypair()], blockhash)?;
+        
+        // Store the signature for later confirmation
+        write_signatures.push(transaction.signatures[0]);
         write_transactions.push(transaction);
     }
 
     println!(
         "{}",
         style(format!(
-            "Writing {} chunks to buffer...",
+            "Writing {} chunks via TPU/QUIC...",
             write_transactions.len()
         ))
         .dim()
     );
 
-    // Send write transactions via RPC for reliability
-    // We need confirmations before deploying, so RPC is more appropriate than TPU here
-    for (idx, transaction) in write_transactions.iter().enumerate() {
-        ctx.rpc()
-            .send_and_confirm_transaction(transaction)
-            .await
-            .context(format!("Failed to write chunk {}/{}", idx + 1, write_transactions.len()))?;
+    // Create leader updater
+    let leader_updater = RpcLeaderUpdater::new(rpc_client.clone()).await?;
+
+    // Setup TPU client using tpu-client-next
+    let bind_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))?;
+    bind_socket.set_nonblocking(true)?;
+
+    let cancel_token = CancellationToken::new();
+    
+    let (transaction_sender, client) = ClientBuilder::new(Box::new(leader_updater))
+        .bind_socket(bind_socket)
+        .leader_send_fanout(2)
+        .identity(ctx.keypair())
+        .max_cache_size(64)
+        .cancel_token(cancel_token.clone())
+        .build()?;
+
+    // Serialize transactions to wire format
+    let wire_transactions: Vec<Vec<u8>> = write_transactions
+        .iter()
+        .map(bincode::serialize)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Send transactions in batch via TPU
+    transaction_sender
+        .send_transactions_in_batch(wire_transactions)
+        .await
+        .context("Failed to send write transactions via TPU")?;
+
+    println!(
+        "{}",
+        style("Waiting for write confirmations...").dim()
+    );
+
+    // Wait for all write transactions to be confirmed
+    let mut confirmed_count = 0;
+    let max_retries = 30; // 30 seconds max wait
+    
+    for retry in 0..max_retries {
+        let mut all_confirmed = true;
         
-        if (idx + 1) % 10 == 0 || idx == write_transactions.len() - 1 {
-            println!(
-                "{}",
-                style(format!("Wrote chunk {}/{}", idx + 1, write_transactions.len())).dim()
+        for (idx, sig) in write_signatures.iter().enumerate() {
+            if idx < confirmed_count {
+                continue; // Already confirmed
+            }
+            
+            match rpc_client.get_signature_statuses(&[*sig]).await {
+                Ok(response) => {
+                    if let Some(status) = &response.value[0] {
+                        if status.confirmation_status.is_some() {
+                            confirmed_count = idx + 1;
+                            if (confirmed_count) % 10 == 0 || confirmed_count == write_signatures.len() {
+                                println!(
+                                    "{}",
+                                    style(format!("Confirmed {}/{} chunks", confirmed_count, write_signatures.len())).dim()
+                                );
+                            }
+                        } else {
+                            all_confirmed = false;
+                        }
+                    } else {
+                        all_confirmed = false;
+                    }
+                }
+                Err(_) => {
+                    all_confirmed = false;
+                }
+            }
+        }
+        
+        if all_confirmed && confirmed_count == write_signatures.len() {
+            break;
+        }
+        
+        if retry == max_retries - 1 {
+            bail!(
+                "Timeout waiting for write confirmations. Only {}/{} chunks confirmed.",
+                confirmed_count,
+                write_signatures.len()
             );
         }
+        
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
+
+    // Shutdown the TPU client
+    client
+        .shutdown()
+        .await
+        .context("Failed to shutdown TPU client")?;
 
     println!("{}", style("Program data written to buffer").green());
 
