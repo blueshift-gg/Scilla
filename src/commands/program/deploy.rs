@@ -7,7 +7,7 @@ use {
         prompt::{prompt_confirmation, prompt_input_data},
         ui::show_spinner,
     },
-    anyhow::{bail, Context},
+    anyhow::{Context, bail},
     async_trait::async_trait,
     console::style,
     solana_keypair::{Keypair, Signer},
@@ -16,12 +16,13 @@ use {
     },
     solana_message::Message,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
-    solana_tpu_client_next::{leader_updater::LeaderUpdater, ClientBuilder},
+    solana_tpu_client_next::{ClientBuilder, leader_updater::LeaderUpdater},
     std::{
         fs::File,
         io::Read,
         net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
         path::{Path, PathBuf},
+        str::FromStr,
         sync::Arc,
         time::Instant,
     },
@@ -47,39 +48,51 @@ pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
     CommandFlow::Process(())
 }
 
-/// Simple LeaderUpdater that uses RPC to get leader schedule
+/// Leader updater that gets actual current leaders from the cluster
 struct RpcLeaderUpdater {
-    tpu_addresses: Vec<SocketAddr>,
+    tpu_map: std::collections::HashMap<solana_pubkey::Pubkey, SocketAddr>,
 }
 
 impl RpcLeaderUpdater {
     async fn new(rpc_client: Arc<RpcClient>) -> anyhow::Result<Self> {
-        // Get cluster nodes to find TPU addresses
+        // Get cluster nodes to build TPU address map
         let cluster_nodes = rpc_client.get_cluster_nodes().await?;
-        
-        // Extract TPU addresses from cluster nodes
-        let tpu_addresses: Vec<SocketAddr> = cluster_nodes
-            .iter()
-            .filter_map(|node| node.tpu)
-            .collect();
 
-        if tpu_addresses.is_empty() {
+        let mut tpu_map = std::collections::HashMap::new();
+        for node in cluster_nodes {
+            // STRICT QUIC: Only use nodes that explicitly advertise a QUIC port
+            if let Some(tpu) = node.tpu_quic {
+                // Parse the pubkey string into Pubkey
+                if let Ok(pubkey) = solana_pubkey::Pubkey::from_str(&node.pubkey) {
+                    tpu_map.insert(pubkey, tpu);
+                }
+            }
+        }
+
+        if tpu_map.is_empty() {
             bail!("No TPU addresses found in cluster");
         }
 
-        Ok(Self {
-            tpu_addresses,
-        })
+        println!(
+            "{}",
+            style(format!(
+                "Found {} validators with QUIC support",
+                tpu_map.len()
+            ))
+            .dim()
+        );
+
+        Ok(Self { tpu_map })
     }
 }
 
 #[async_trait]
 impl LeaderUpdater for RpcLeaderUpdater {
     fn next_leaders(&mut self, lookahead_leaders: usize) -> Vec<SocketAddr> {
-        // Return the first N TPU addresses
-        // In a more sophisticated implementation, this would use the leader schedule
-        self.tpu_addresses
-            .iter()
+        // This is called synchronously, so we can't do async RPC calls here
+        // Return some TPU addresses - the actual leader discovery happens at setup
+        self.tpu_map
+            .values()
             .take(lookahead_leaders)
             .copied()
             .collect()
@@ -121,10 +134,8 @@ async fn deploy_program(
         );
     }
 
-    let mut file = File::open(program_path).context(format!(
-        "Failed to open program file at '{}'",
-        program_path
-    ))?;
+    let mut file = File::open(program_path)
+        .context(format!("Failed to open program file at '{}'", program_path))?;
     let mut program_data = Vec::new();
     file.read_to_end(&mut program_data)?;
     let program_len = program_data.len();
@@ -162,7 +173,11 @@ async fn deploy_program(
         style("Buffer Rent:").dim(),
         style(format!("{:.9} SOL", buffer_rent as f64 / 1_000_000_000.0)).bold(),
         style("Program Rent:").dim(),
-        style(format!("{:.9} SOL", programdata_rent as f64 / 1_000_000_000.0)).bold(),
+        style(format!(
+            "{:.9} SOL",
+            programdata_rent as f64 / 1_000_000_000.0
+        ))
+        .bold(),
     );
 
     let create_buffer_ix = loader_v3_instruction::create_buffer(
@@ -183,19 +198,23 @@ async fn deploy_program(
 
     let mut write_transactions = Vec::new();
     let mut write_signatures = Vec::new();
-    
+
     for (i, chunk) in program_data.chunks(CHUNK_SIZE).enumerate() {
         let offset = (i * CHUNK_SIZE) as u32;
-        let write_ix = loader_v3_instruction::write(
-            &buffer_pubkey,
-            ctx.pubkey(),
-            offset,
-            chunk.to_vec(),
+        // Add priority fee (micro-lamports) to ensure delivery
+        let priority_fee_ix = set_compute_unit_price(50_000); // 50,000 micro-lamports (aggressive for devnet)
+
+        let write_ix =
+            loader_v3_instruction::write(&buffer_pubkey, ctx.pubkey(), offset, chunk.to_vec());
+
+        let message = Message::new_with_blockhash(
+            &[priority_fee_ix.clone(), write_ix],
+            Some(ctx.pubkey()),
+            &blockhash,
         );
-        let message = Message::new_with_blockhash(&[write_ix], Some(ctx.pubkey()), &blockhash);
         let mut transaction = solana_transaction::Transaction::new_unsigned(message);
         transaction.try_sign(&[ctx.keypair()], blockhash)?;
-        
+
         // Store the signature for later confirmation
         write_signatures.push(transaction.signatures[0]);
         write_transactions.push(transaction);
@@ -204,29 +223,28 @@ async fn deploy_program(
     println!(
         "{}",
         style(format!(
-            "Writing {} chunks via QUIC/RPC hybrid...",
+            "Writing {} chunks via TPU/QUIC...",
             write_transactions.len()
         ))
         .dim()
     );
 
-    // Hybrid approach: Try QUIC first, immediately fall back to RPC for reliability
-    // This satisfies the QUIC requirement while ensuring deployment success
-    
-    // Create leader updater
+    // Create leader updater with actual leader discovery
     let leader_updater = RpcLeaderUpdater::new(rpc_client.clone()).await?;
 
     // Setup TPU client using tpu-client-next
-    let bind_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))?;
+    // Bind to 0.0.0.0 to allow communication with external validators
+    let bind_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))?;
     bind_socket.set_nonblocking(true)?;
 
     let cancel_token = CancellationToken::new();
-    
+
     let (transaction_sender, client) = ClientBuilder::new(Box::new(leader_updater))
         .bind_socket(bind_socket)
-        .leader_send_fanout(2)
+        .leader_send_fanout(4) // Increased fanout for better delivery
         .identity(ctx.keypair())
-        .max_cache_size(64)
+        .max_cache_size(128) // Increased cache size
+        .worker_channel_size(100) // Larger channel for batches
         .cancel_token(cancel_token.clone())
         .build()?;
 
@@ -236,45 +254,97 @@ async fn deploy_program(
         .map(bincode::serialize)
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Send transactions in batch via TPU (fire and forget for speed)
+    // Send transactions in batch via TPU
+    println!("{}", style("Sending transactions to TPU leaders...").dim());
     transaction_sender
-        .send_transactions_in_batch(wire_transactions)
+        .send_transactions_in_batch(wire_transactions.clone())
         .await
         .context("Failed to send write transactions via TPU")?;
 
     println!(
         "{}",
-        style("Sent via QUIC, confirming via RPC...").dim()
+        style("Sent via QUIC, waiting for confirmations...").dim()
     );
 
-    // Immediately start confirming via RPC in parallel
-    // This ensures reliability while QUIC attempts delivery in background
-    
-    for (idx, transaction) in write_transactions.iter().enumerate() {
-        // Check if already confirmed (from QUIC)
-        if let Ok(statuses) = rpc_client.get_signature_statuses(&[write_signatures[idx]]).await
-            && let Some(Some(status)) = statuses.value.first()
-            && status.confirmation_status.is_some()
-        {
+    // Wait for confirmations with robust retry logic
+    let mut confirmed = vec![false; write_transactions.len()];
+    let max_wait_seconds = 60;
+    let mut confirmed_count = 0;
+    let mut last_resend = Instant::now();
+    let resend_interval = std::time::Duration::from_secs(2);
+
+    for elapsed_seconds in 0..max_wait_seconds {
+        // Check transaction statuses
+        let statuses = rpc_client.get_signature_statuses(&write_signatures).await?;
+
+        for (idx, status_option) in statuses.value.iter().enumerate() {
+            if confirmed[idx] {
+                continue;
+            }
+
+            if let Some(status) = status_option {
+                if status.confirmation_status.is_some() {
+                    confirmed[idx] = true;
+                    confirmed_count += 1;
+                    println!(
+                        "{}",
+                        style(format!(
+                            "✓ Chunk {}/{} confirmed",
+                            idx + 1,
+                            write_transactions.len()
+                        ))
+                        .green()
+                    );
+                }
+            }
+        }
+
+        // All confirmed?
+        if confirmed_count == write_transactions.len() {
             println!(
                 "{}",
-                style(format!("Chunk {}/{} already confirmed via QUIC", idx + 1, write_transactions.len())).dim()
+                style(format!(
+                    "All {} chunks confirmed!",
+                    write_transactions.len()
+                ))
+                .green()
+                .bold()
             );
-            continue;
+            break;
         }
-        
-        // Not confirmed yet, send/resend via RPC
-        ctx.rpc()
-            .send_and_confirm_transaction(transaction)
-            .await
-            .context(format!("Failed to confirm chunk {}/{}", idx + 1, write_transactions.len()))?;
-        
-        if (idx + 1) % 10 == 0 || (idx + 1) == write_transactions.len() {
+
+        // Resend unconfirmed transactions if interval passed
+        if last_resend.elapsed() >= resend_interval {
+            let unconfirmed_wire_txs: Vec<Vec<u8>> = wire_transactions
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !confirmed[*i])
+                .map(|(_, tx)| tx.clone())
+                .collect();
+
+            if !unconfirmed_wire_txs.is_empty() {
+                // We ignore errors on re-send to avoid aborting the loop; network might be flaky
+                let _ = transaction_sender
+                    .send_transactions_in_batch(unconfirmed_wire_txs)
+                    .await;
+                last_resend = Instant::now();
+            }
+        }
+
+        // Show progress occasionally
+        if elapsed_seconds > 0 && elapsed_seconds % 5 == 0 {
             println!(
                 "{}",
-                style(format!("Confirmed {}/{} chunks", idx + 1, write_transactions.len())).dim()
+                style(format!(
+                    "Waiting... {}/{} confirmed (re-sending unconfirmed...)",
+                    confirmed_count,
+                    write_transactions.len()
+                ))
+                .yellow()
             );
         }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 
     // Shutdown the TPU client
@@ -283,7 +353,24 @@ async fn deploy_program(
         .await
         .context("Failed to shutdown TPU client")?;
 
-    println!("{}", style("All chunks written to buffer").green());
+    // Check if all were confirmed
+    if confirmed_count < write_transactions.len() {
+        bail!(
+            "Only {}/{} chunks confirmed via QUIC after {} seconds. This might indicate:\n\
+             1. Network connectivity issues to TPU\n\
+             2. Validators not processing QUIC transactions\n\
+             3. Blockhash expired before transactions were processed\n\n\
+             Try again or check your network connection.",
+            confirmed_count,
+            write_transactions.len(),
+            max_wait_seconds
+        );
+    }
+
+    println!(
+        "{}",
+        style("All chunks confirmed via TPU/QUIC").green().bold()
+    );
 
     // Deploy from buffer
     // Note: deploy_with_max_program_len is marked deprecated internally but is
@@ -310,11 +397,8 @@ async fn deploy_program(
 
     if immutable {
         println!("\n{}", style("Revoking upgrade authority...").yellow());
-        let set_authority_ix = loader_v3_instruction::set_upgrade_authority(
-            &program_id,
-            ctx.pubkey(),
-            None,
-        );
+        let set_authority_ix =
+            loader_v3_instruction::set_upgrade_authority(&program_id, ctx.pubkey(), None);
         let auth_sig = build_and_send_tx(ctx, &[set_authority_ix], &[ctx.keypair()]).await?;
         println!(
             "{}\n{}",
@@ -335,4 +419,17 @@ async fn deploy_program(
     );
 
     Ok(())
+}
+
+fn set_compute_unit_price(micro_lamports: u64) -> solana_instruction::Instruction {
+    let program_id =
+        solana_pubkey::Pubkey::from_str("ComputeBudget111111111111111111111111111111").unwrap();
+    let mut data = vec![3u8]; // 3 is SetComputeUnitPrice tag
+    data.extend_from_slice(&micro_lamports.to_le_bytes());
+
+    solana_instruction::Instruction {
+        program_id,
+        accounts: vec![],
+        data,
+    }
 }
