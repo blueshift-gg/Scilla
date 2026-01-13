@@ -49,4 +49,9 @@ impl NavContext {
         self.stack.clear();
         self.stack.push(section);
     }
+
+    /// Returns `true` if the current section is nested within another section.
+    pub fn is_nested(&self) -> bool {
+        self.stack.len() >= 2
+    }
 }

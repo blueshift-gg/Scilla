@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::CommandFlow,
+        commands::{CommandFlow, ReturnOptions},
         context::ScillaContext,
         misc::helpers::{bincode_deserialize, build_and_send_tx, lamports_to_sol, sol_to_lamports},
         prompt::prompt_input_data,
@@ -62,7 +62,7 @@ impl fmt::Display for AccountCommand {
 }
 
 impl AccountCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
         match self {
             AccountCommand::FetchAccount => {
                 let pubkey: Pubkey = prompt_input_data("Enter Pubkey:");
@@ -93,11 +93,11 @@ impl AccountCommand {
                 show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
             }
             AccountCommand::GoBack => {
-                return CommandFlow::GoBack;
+                return CommandFlow::Return(ReturnOptions::MainMenu);
             }
         }
 
-        CommandFlow::Process(())
+        CommandFlow::Processed
     }
 }
 

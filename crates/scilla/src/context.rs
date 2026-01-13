@@ -11,13 +11,12 @@ use {
 pub struct ScillaContext {
     rpc_client: RpcClient,
     keypair: Keypair,
-    pubkey: Pubkey,
+    pubkey: Pubkey, // Cache the pubkey to avoid repeated stack allocations
     keypair_path: PathBuf,
     navigation_context: NavContext,
 }
 
-/// Creates RPC client, keypair, pubkey from config
-fn create_rpc_and_keypair(config: &ScillaConfig) -> anyhow::Result<(RpcClient, Keypair)> {
+fn create_rpc_client(config: &ScillaConfig) -> anyhow::Result<RpcClient> {
     let rpc_client = RpcClient::new_with_commitment(
         config.rpc_url.clone(),
         CommitmentConfig {
@@ -25,15 +24,17 @@ fn create_rpc_and_keypair(config: &ScillaConfig) -> anyhow::Result<(RpcClient, K
         },
     );
 
-    let keypair = Keypair::read_from_file(&config.keypair_path).map_err(|e| {
+    Ok(rpc_client)
+}
+
+fn load_keypair(config: &ScillaConfig) -> anyhow::Result<Keypair> {
+    Keypair::read_from_file(&config.keypair_path).map_err(|e| {
         anyhow!(
             "Failed to read keypair from {}: {}",
             config.keypair_path.display(),
             e
         )
-    })?;
-
-    Ok((rpc_client, keypair))
+    })
 }
 
 impl ScillaContext {
@@ -54,8 +55,8 @@ impl ScillaContext {
     }
 
     pub fn reload(&mut self, new_config: ScillaConfig) -> anyhow::Result<()> {
-        let (rpc_client, keypair) = create_rpc_and_keypair(&new_config)?;
-
+        let rpc_client = create_rpc_client(&new_config)?;
+        let keypair = load_keypair(&new_config)?;
         let pubkey = keypair.pubkey();
 
         // Preserve navigation context, only update RPC/keypair
@@ -76,7 +77,9 @@ impl TryFrom<ScillaConfig> for ScillaContext {
     type Error = anyhow::Error;
 
     fn try_from(config: ScillaConfig) -> anyhow::Result<Self> {
-        let (rpc_client, keypair) = create_rpc_and_keypair(&config)?;
+        let rpc_client = create_rpc_client(&config)?;
+        let keypair = load_keypair(&config)?;
+
         let pubkey = keypair.pubkey();
 
         Ok(Self {

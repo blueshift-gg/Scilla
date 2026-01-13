@@ -1,6 +1,8 @@
 use {
     crate::{
-        commands::CommandFlow, constants::LAMPORTS_PER_SOL, context::ScillaContext,
+        commands::{CommandFlow, ReturnOptions},
+        constants::LAMPORTS_PER_SOL,
+        context::ScillaContext,
         ui::show_spinner,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
@@ -56,7 +58,7 @@ impl fmt::Display for ClusterCommand {
 }
 
 impl ClusterCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
         match self {
             ClusterCommand::EpochInfo => {
                 show_spinner(self.spinner_msg(), fetch_epoch_info(ctx)).await;
@@ -83,11 +85,11 @@ impl ClusterCommand {
                 show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await;
             }
             ClusterCommand::GoBack => {
-                return CommandFlow::GoBack;
+                return CommandFlow::Return(ReturnOptions::MainMenu);
             }
         }
 
-        CommandFlow::Process(())
+        CommandFlow::Processed
     }
 }
 

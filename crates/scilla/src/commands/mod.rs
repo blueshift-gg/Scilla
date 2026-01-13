@@ -21,13 +21,18 @@ pub mod stake;
 pub mod transaction;
 pub mod vote;
 
-pub enum CommandFlow<T> {
-    Process(T),
-    GoBack,
+pub enum CommandFlow {
+    Processed,
+    Return(ReturnOptions),
     Exit,
 }
 
-impl<T> Termination for CommandFlow<T> {
+pub enum ReturnOptions {
+    MainMenu,
+    PreviousSection,
+}
+
+impl Termination for CommandFlow {
     fn report(self) -> std::process::ExitCode {
         println!("{}", style("Goodbye 👋").dim());
         ExitCode::SUCCESS
@@ -46,7 +51,7 @@ pub enum Command {
 }
 
 impl Command {
-    pub async fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow {
         match self {
             Command::Cluster(cluster_command) => cluster_command.process_command(ctx).await,
             Command::Stake(stake_command) => stake_command.process_command(ctx).await,

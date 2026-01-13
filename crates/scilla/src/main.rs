@@ -1,12 +1,10 @@
 use {
-    crate::{
-        commands::CommandFlow,
-        config::ScillaConfig,
-        context::ScillaContext,
-        error::ScillaResult,
-        prompt::{prompt_for_command, prompt_section},
-    },
+    crate::{commands::ReturnOptions, error::ScillaResult, prompt::prompt_go_back},
+    commands::CommandFlow,
+    config::ScillaConfig,
     console::style,
+    context::ScillaContext,
+    prompt::{prompt_for_command, prompt_section},
 };
 
 pub mod commands;
@@ -19,7 +17,7 @@ pub mod prompt;
 pub mod ui;
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> ScillaResult<()> {
+async fn main() -> ScillaResult {
     println!(
         "{}",
         style("⚡ Scilla — Hacking Through the Solana Matrix")
@@ -35,17 +33,31 @@ async fn main() -> ScillaResult<()> {
 
     loop {
         match command.process_command(&mut ctx).await {
-            CommandFlow::Process(_) => {
+            CommandFlow::Processed => {
                 let current = ctx
                     .nav()
                     .current()
                     .expect("Navigation stack should have root");
                 command = prompt_section(&current)?;
             }
-            CommandFlow::GoBack => {
-                if let Some(parent) = ctx.nav().pop() {
-                    command = prompt_section(&parent)?;
+            CommandFlow::Return(_) => {
+                if ctx.nav().is_nested() {
+                    match prompt_go_back() {
+                        ReturnOptions::MainMenu => {
+                            command = prompt_for_command()?;
+                            ctx.nav().set_root(command.section());
+                        }
+                        ReturnOptions::PreviousSection => {
+                            ctx.nav().pop();
+                            let previous = ctx
+                                .nav()
+                                .current()
+                                .expect("Navigation stack should have root");
+                            command = prompt_section(&previous)?;
+                        }
+                    }
                 } else {
+                    // At root level, go back to main menu
                     command = prompt_for_command()?;
                     ctx.nav().set_root(command.section());
                 }

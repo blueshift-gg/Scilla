@@ -1,5 +1,8 @@
 use {
-    crate::{commands::CommandFlow, context::ScillaContext},
+    crate::{
+        commands::{CommandFlow, ReturnOptions},
+        context::ScillaContext,
+    },
     core::fmt,
 };
 
@@ -53,7 +56,7 @@ impl fmt::Display for ProgramCommand {
 }
 
 impl ProgramCommand {
-    pub async fn process_command(&self, _ctx: &ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, _ctx: &ScillaContext) -> CommandFlow {
         match self {
             // import here the functions we build in the files
             ProgramCommand::Deploy => todo!(),
@@ -61,7 +64,7 @@ impl ProgramCommand {
             ProgramCommand::Build => todo!(),
             ProgramCommand::Close => todo!(),
             ProgramCommand::Extend => todo!(),
-            ProgramCommand::GoBack => CommandFlow::GoBack,
+            ProgramCommand::GoBack => CommandFlow::Return(ReturnOptions::MainMenu),
         }
     }
 }

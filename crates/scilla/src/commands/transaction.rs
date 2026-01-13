@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::CommandFlow,
+        commands::{CommandFlow, ReturnOptions},
         context::ScillaContext,
         misc::helpers::{bincode_deserialize, decode_base58, decode_base64},
         prompt::{prompt_input_data, prompt_select_data},
@@ -49,7 +49,7 @@ impl fmt::Display for TransactionCommand {
 }
 
 impl TransactionCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
         match self {
             TransactionCommand::CheckConfirmation => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
@@ -96,10 +96,10 @@ impl TransactionCommand {
                 )
                 .await;
             }
-            TransactionCommand::GoBack => return CommandFlow::GoBack,
+            TransactionCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
         }
 
-        CommandFlow::Process(())
+        CommandFlow::Processed
     }
 }
 

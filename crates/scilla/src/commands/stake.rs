@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::CommandFlow,
+        commands::{CommandFlow, ReturnOptions},
         constants::{
             ACTIVE_STAKE_EPOCH_BOUND, DEFAULT_EPOCH_LIMIT, LAMPORTS_PER_SOL,
             STAKE_HISTORY_SYSVAR_ADDR,
@@ -83,7 +83,7 @@ impl fmt::Display for StakeCommand {
 }
 
 impl StakeCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
         match self {
             StakeCommand::Create => {
                 let stake_account_keypair_path: PathBuf =
@@ -145,7 +145,7 @@ impl StakeCommand {
 
                 if !prompt_confirmation("Are you sure you want to deactivate this stake?") {
                     println!("{}", style("Deactivation cancelled.").yellow());
-                    return CommandFlow::Process(());
+                    return CommandFlow::Processed;
                 }
 
                 show_spinner(
@@ -165,7 +165,7 @@ impl StakeCommand {
                     amount.value()
                 )) {
                     println!("{}", style("Withdrawal cancelled.").yellow());
-                    return CommandFlow::Process(());
+                    return CommandFlow::Processed;
                 }
 
                 show_spinner(
@@ -226,10 +226,10 @@ impl StakeCommand {
                 show_spinner(self.spinner_msg(), process_stake_history(ctx)).await;
             }
 
-            StakeCommand::GoBack => return CommandFlow::GoBack,
+            StakeCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
         }
 
-        CommandFlow::Process(())
+        CommandFlow::Processed
     }
 }
 

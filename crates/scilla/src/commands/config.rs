@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::CommandFlow,
+        commands::{CommandFlow, ReturnOptions},
         config::{ScillaConfig, scilla_config_path},
         context::ScillaContext,
         misc::helpers::short_pubkey,
@@ -99,18 +99,18 @@ fn get_commitment_levels() -> Vec<UICommitmentOptions> {
 }
 
 impl ConfigCommand {
-    pub fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow<()> {
+    pub fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow {
         let res = match self {
             ConfigCommand::Show => show_config(ctx),
             ConfigCommand::Edit => edit_config(ctx),
-            ConfigCommand::GoBack => return CommandFlow::GoBack,
+            ConfigCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
         };
 
         if let Err(e) = res {
             print_error(e.to_string())
         }
 
-        CommandFlow::Process(())
+        CommandFlow::Processed
     }
 }
 
