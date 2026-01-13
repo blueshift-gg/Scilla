@@ -7,8 +7,7 @@ use {
         prompt::{prompt_confirmation, prompt_input_data},
         ui::show_spinner,
     },
-    anyhow::{anyhow, bail, Context},
-    async_trait::async_trait,
+    anyhow::{bail, Context},
     console::style,
     solana_keypair::{Keypair, Signer},
     solana_loader_v3_interface::{
@@ -16,16 +15,13 @@ use {
     },
     solana_message::Message,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
-    solana_tpu_client_next::{leader_updater::LeaderUpdater, ClientBuilder},
     std::{
         fs::File,
         io::Read,
-        net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
         path::{Path, PathBuf},
         sync::Arc,
         time::Instant,
     },
-    tokio_util::sync::CancellationToken,
 };
 
 pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
@@ -45,49 +41,6 @@ pub async fn deploy(ctx: &ScillaContext) -> CommandFlow<()> {
     .await;
 
     CommandFlow::Process(())
-}
-
-/// Simple LeaderUpdater that uses RPC to get leader schedule
-struct RpcLeaderUpdater {
-    tpu_addresses: Vec<SocketAddr>,
-}
-
-impl RpcLeaderUpdater {
-    async fn new(rpc_client: Arc<RpcClient>) -> anyhow::Result<Self> {
-        // Get cluster nodes to find TPU addresses
-        let cluster_nodes = rpc_client.get_cluster_nodes().await?;
-        
-        // Extract TPU addresses from cluster nodes
-        let tpu_addresses: Vec<SocketAddr> = cluster_nodes
-            .iter()
-            .filter_map(|node| node.tpu)
-            .collect();
-
-        if tpu_addresses.is_empty() {
-            bail!("No TPU addresses found in cluster");
-        }
-
-        Ok(Self {
-            tpu_addresses,
-        })
-    }
-}
-
-#[async_trait]
-impl LeaderUpdater for RpcLeaderUpdater {
-    fn next_leaders(&mut self, lookahead_leaders: usize) -> Vec<SocketAddr> {
-        // Return the first N TPU addresses
-        // In a more sophisticated implementation, this would use the leader schedule
-        self.tpu_addresses
-            .iter()
-            .take(lookahead_leaders)
-            .copied()
-            .collect()
-    }
-
-    async fn stop(&mut self) {
-        // No cleanup needed
-    }
 }
 
 async fn deploy_program(
@@ -199,49 +152,27 @@ async fn deploy_program(
     println!(
         "{}",
         style(format!(
-            "Writing {} chunks via TPU...",
+            "Writing {} chunks to buffer...",
             write_transactions.len()
         ))
         .dim()
     );
 
-    // Create leader updater
-    let leader_updater = RpcLeaderUpdater::new(rpc_client.clone()).await?;
-
-    // Setup TPU client using tpu-client-next
-    let bind_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))?;
-    bind_socket.set_nonblocking(true)?;
-
-    let cancel_token = CancellationToken::new();
-    
-    let (transaction_sender, client) = ClientBuilder::new(Box::new(leader_updater))
-        .bind_socket(bind_socket)
-        .leader_send_fanout(2)
-        .identity(ctx.keypair())
-        .max_cache_size(64)
-        .cancel_token(cancel_token.clone())
-        .build()?;
-
-    // Serialize transactions to wire format
-    let wire_transactions: Vec<Vec<u8>> = write_transactions
-        .iter()
-        .map(bincode::serialize)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    // Send transactions in batch
-    transaction_sender
-        .send_transactions_in_batch(wire_transactions)
-        .await
-        .map_err(|e| anyhow!("Failed to send transactions: {}", e))?;
-
-    // Wait a bit for transactions to be processed
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-    // Shutdown the client
-    client
-        .shutdown()
-        .await
-        .map_err(|e| anyhow!("Failed to shutdown TPU client: {}", e))?;
+    // Send write transactions via RPC for reliability
+    // We need confirmations before deploying, so RPC is more appropriate than TPU here
+    for (idx, transaction) in write_transactions.iter().enumerate() {
+        ctx.rpc()
+            .send_and_confirm_transaction(transaction)
+            .await
+            .context(format!("Failed to write chunk {}/{}", idx + 1, write_transactions.len()))?;
+        
+        if (idx + 1) % 10 == 0 || idx == write_transactions.len() - 1 {
+            println!(
+                "{}",
+                style(format!("Wrote chunk {}/{}", idx + 1, write_transactions.len())).dim()
+            );
+        }
+    }
 
     println!("{}", style("Program data written to buffer").green());
 
