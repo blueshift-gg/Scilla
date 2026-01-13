@@ -204,12 +204,16 @@ async fn deploy_program(
     println!(
         "{}",
         style(format!(
-            "Writing {} chunks via TPU/QUIC...",
+            "Writing {} chunks via QUIC...",
             write_transactions.len()
         ))
         .dim()
     );
 
+    // For reliability, we'll use a hybrid approach:
+    // - Try TPU/QUIC first for speed
+    // - Fall back to RPC for any transactions that don't confirm
+    
     // Create leader updater
     let leader_updater = RpcLeaderUpdater::new(rpc_client.clone()).await?;
 
@@ -241,55 +245,38 @@ async fn deploy_program(
 
     println!(
         "{}",
-        style("Waiting for write confirmations...").dim()
+        style("Sent via QUIC, waiting for confirmations...").dim()
     );
 
-    // Wait for all write transactions to be confirmed
+    // Wait for confirmations with a shorter timeout for TPU
     let mut confirmed_count = 0;
-    let max_retries = 30; // 30 seconds max wait
+    let tpu_wait_time = 10; // 10 seconds for TPU
+    let mut unconfirmed_indices = Vec::new();
     
-    for retry in 0..max_retries {
-        let mut all_confirmed = true;
+    for _ in 0..tpu_wait_time {
+        let statuses = rpc_client.get_signature_statuses(&write_signatures).await?;
         
-        for (idx, sig) in write_signatures.iter().enumerate() {
+        for (idx, status_option) in statuses.value.iter().enumerate() {
             if idx < confirmed_count {
-                continue; // Already confirmed
+                continue;
             }
             
-            match rpc_client.get_signature_statuses(&[*sig]).await {
-                Ok(response) => {
-                    if let Some(status) = &response.value[0] {
-                        if status.confirmation_status.is_some() {
-                            confirmed_count = idx + 1;
-                            if (confirmed_count) % 10 == 0 || confirmed_count == write_signatures.len() {
-                                println!(
-                                    "{}",
-                                    style(format!("Confirmed {}/{} chunks", confirmed_count, write_signatures.len())).dim()
-                                );
-                            }
-                        } else {
-                            all_confirmed = false;
-                        }
-                    } else {
-                        all_confirmed = false;
-                    }
-                }
-                Err(_) => {
-                    all_confirmed = false;
+            if let Some(status) = status_option
+                && status.confirmation_status.is_some()
+                && idx == confirmed_count
+            {
+                confirmed_count = idx + 1;
+                if confirmed_count % 10 == 0 || confirmed_count == write_signatures.len() {
+                    println!(
+                        "{}",
+                        style(format!("Confirmed {}/{} chunks via QUIC", confirmed_count, write_signatures.len())).dim()
+                    );
                 }
             }
         }
         
-        if all_confirmed && confirmed_count == write_signatures.len() {
+        if confirmed_count == write_signatures.len() {
             break;
-        }
-        
-        if retry == max_retries - 1 {
-            bail!(
-                "Timeout waiting for write confirmations. Only {}/{} chunks confirmed.",
-                confirmed_count,
-                write_signatures.len()
-            );
         }
         
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -301,7 +288,43 @@ async fn deploy_program(
         .await
         .context("Failed to shutdown TPU client")?;
 
-    println!("{}", style("Program data written to buffer").green());
+    // If not all confirmed via TPU, send remaining via RPC
+    if confirmed_count < write_signatures.len() {
+        println!(
+            "{}",
+            style(format!(
+                "{}/{} chunks confirmed via QUIC, sending remaining via RPC for reliability...",
+                confirmed_count,
+                write_signatures.len()
+            ))
+            .yellow()
+        );
+        
+        for idx in confirmed_count..write_signatures.len() {
+            unconfirmed_indices.push(idx);
+        }
+        
+        // Resend unconfirmed transactions via RPC
+        for idx in unconfirmed_indices {
+            println!(
+                "{}",
+                style(format!("Sending chunk {}/{} via RPC...", idx + 1, write_signatures.len())).dim()
+            );
+            
+            ctx.rpc()
+                .send_and_confirm_transaction(&write_transactions[idx])
+                .await
+                .context(format!("Failed to write chunk {}/{} via RPC", idx + 1, write_transactions.len()))?;
+            
+            confirmed_count = idx + 1;
+            println!(
+                "{}",
+                style(format!("Confirmed {}/{} chunks", confirmed_count, write_signatures.len())).dim()
+            );
+        }
+    }
+
+    println!("{}", style("All chunks written to buffer").green());
 
     // Deploy from buffer
     // Note: deploy_with_max_program_len is marked deprecated internally but is
