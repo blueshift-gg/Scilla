@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         config::{ScillaConfig, scilla_config_path},
         context::ScillaContext,
         misc::helpers::short_pubkey,
@@ -103,7 +103,7 @@ impl ConfigCommand {
         let res = match self {
             ConfigCommand::Show => show_config(ctx),
             ConfigCommand::Edit => edit_config(ctx),
-            ConfigCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
+            ConfigCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
         };
 
         if let Err(e) = res {

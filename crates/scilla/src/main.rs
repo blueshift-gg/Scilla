@@ -1,5 +1,5 @@
 use {
-    crate::{commands::ReturnOptions, error::ScillaResult, prompt::prompt_go_back},
+    crate::{commands::NavigationTarget, error::ScillaResult, prompt::prompt_go_back},
     commands::CommandFlow,
     config::ScillaConfig,
     console::style,
@@ -40,14 +40,14 @@ async fn main() -> ScillaResult {
                     .expect("Navigation stack should have root");
                 command = prompt_section(&current)?;
             }
-            CommandFlow::Return(_) => {
+            CommandFlow::NavigateTo(_) => {
                 if ctx.nav().is_nested() {
                     match prompt_go_back() {
-                        ReturnOptions::MainMenu => {
+                        NavigationTarget::MainMenu => {
                             command = prompt_for_command()?;
                             ctx.nav().set_root(command.section());
                         }
-                        ReturnOptions::PreviousSection => {
+                        NavigationTarget::PreviousSection => {
                             ctx.nav().pop();
                             let previous = ctx
                                 .nav()

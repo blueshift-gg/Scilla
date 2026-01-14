@@ -1,7 +1,7 @@
 use {
     crate::{
         ScillaContext,
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         misc::helpers::{
             Commission, SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
             read_keypair_from_path,
@@ -153,7 +153,7 @@ impl VoteCommand {
                 )
                 .await;
             }
-            VoteCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
+            VoteCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
         }
 
         CommandFlow::Processed

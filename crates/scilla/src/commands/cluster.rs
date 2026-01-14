@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         constants::LAMPORTS_PER_SOL,
         context::ScillaContext,
         ui::show_spinner,
@@ -85,7 +85,7 @@ impl ClusterCommand {
                 show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await;
             }
             ClusterCommand::GoBack => {
-                return CommandFlow::Return(ReturnOptions::MainMenu);
+                return CommandFlow::NavigateTo(NavigationTarget::MainMenu);
             }
         }
 

@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         context::ScillaContext,
         misc::helpers::{bincode_deserialize, build_and_send_tx, lamports_to_sol, sol_to_lamports},
         prompt::prompt_input_data,
@@ -93,7 +93,7 @@ impl AccountCommand {
                 show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
             }
             AccountCommand::GoBack => {
-                return CommandFlow::Return(ReturnOptions::MainMenu);
+                return CommandFlow::NavigateTo(NavigationTarget::MainMenu);
             }
         }
 

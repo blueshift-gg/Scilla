@@ -1,7 +1,7 @@
 use {
     crate::{
         commands::{
-            Command, CommandGroup, ReturnOptions, account::AccountCommand, cluster::ClusterCommand,
+            Command, CommandGroup, NavigationTarget, account::AccountCommand, cluster::ClusterCommand,
             config::ConfigCommand, stake::StakeCommand, transaction::TransactionCommand,
             vote::VoteCommand,
         },
@@ -285,7 +285,7 @@ pub fn prompt_section(section: &CommandGroup) -> anyhow::Result<Command> {
     }
 }
 
-pub fn prompt_go_back() -> ReturnOptions {
+pub fn prompt_go_back() -> NavigationTarget {
     let choice = Select::new(
         "Go Back to menu or last section",
         vec!["Menu", "Last Section"],
@@ -293,8 +293,8 @@ pub fn prompt_go_back() -> ReturnOptions {
     .prompt()
     .unwrap();
     match choice {
-        "Menu" => ReturnOptions::MainMenu,
-        "Last Section" => ReturnOptions::PreviousSection,
+        "Menu" => NavigationTarget::MainMenu,
+        "Last Section" => NavigationTarget::PreviousSection,
         _ => unreachable!(),
     }
 }

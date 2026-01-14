@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         context::ScillaContext,
     },
     core::fmt,
@@ -64,7 +64,7 @@ impl ProgramCommand {
             ProgramCommand::Build => todo!(),
             ProgramCommand::Close => todo!(),
             ProgramCommand::Extend => todo!(),
-            ProgramCommand::GoBack => CommandFlow::Return(ReturnOptions::MainMenu),
+            ProgramCommand::GoBack => CommandFlow::NavigateTo(NavigationTarget::MainMenu),
         }
     }
 }

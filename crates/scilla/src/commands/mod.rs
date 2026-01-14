@@ -23,11 +23,11 @@ pub mod vote;
 
 pub enum CommandFlow {
     Processed,
-    Return(ReturnOptions),
+    NavigateTo(NavigationTarget),
     Exit,
 }
 
-pub enum ReturnOptions {
+pub enum NavigationTarget {
     MainMenu,
     PreviousSection,
 }

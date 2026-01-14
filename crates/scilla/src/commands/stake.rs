@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         constants::{
             ACTIVE_STAKE_EPOCH_BOUND, DEFAULT_EPOCH_LIMIT, LAMPORTS_PER_SOL,
             STAKE_HISTORY_SYSVAR_ADDR,
@@ -226,7 +226,7 @@ impl StakeCommand {
                 show_spinner(self.spinner_msg(), process_stake_history(ctx)).await;
             }
 
-            StakeCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
+            StakeCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
         }
 
         CommandFlow::Processed

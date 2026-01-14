@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, ReturnOptions},
+        commands::{CommandFlow, NavigationTarget},
         context::ScillaContext,
         misc::helpers::{bincode_deserialize, decode_base58, decode_base64},
         prompt::{prompt_input_data, prompt_select_data},
@@ -96,7 +96,7 @@ impl TransactionCommand {
                 )
                 .await;
             }
-            TransactionCommand::GoBack => return CommandFlow::Return(ReturnOptions::MainMenu),
+            TransactionCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
         }
 
         CommandFlow::Processed
