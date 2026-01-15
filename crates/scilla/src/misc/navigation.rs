@@ -50,6 +50,13 @@ impl NavContext {
         self.stack.push(section);
     }
 
+    /// Pushes a new section onto the navigation stack if capacity allows.
+    pub fn push(&mut self, section: CommandGroup) {
+        if self.stack.len() < MAX_DEPTH {
+            self.stack.push(section);
+        }
+    }
+
     /// Returns `true` if the current section is nested within another section.
     pub fn is_nested(&self) -> bool {
         self.stack.len() >= 2

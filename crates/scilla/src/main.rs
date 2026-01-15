@@ -40,28 +40,33 @@ async fn main() -> ScillaResult {
                     .expect("Navigation stack should have root");
                 command = prompt_section(&current)?;
             }
-            CommandFlow::NavigateTo(_) => {
-                if ctx.nav().is_nested() {
-                    match prompt_go_back() {
-                        NavigationTarget::MainMenu => {
-                            command = prompt_for_command()?;
-                            ctx.nav().set_root(command.section());
-                        }
-                        NavigationTarget::PreviousSection => {
-                            ctx.nav().pop();
-                            let previous = ctx
-                                .nav()
-                                .current()
-                                .expect("Navigation stack should have root");
-                            command = prompt_section(&previous)?;
-                        }
-                    }
-                } else {
-                    // At root level, go back to main menu
+            CommandFlow::NavigateTo(target) => match target {
+                NavigationTarget::MainMenu => {
                     command = prompt_for_command()?;
                     ctx.nav().set_root(command.section());
                 }
-            }
+                NavigationTarget::PreviousSection => {
+                    if ctx.nav().is_nested() {
+                        match prompt_go_back() {
+                            NavigationTarget::MainMenu => {
+                                command = prompt_for_command()?;
+                                ctx.nav().set_root(command.section());
+                            }
+                            NavigationTarget::PreviousSection => {
+                                ctx.nav().pop();
+                                let previous = ctx
+                                    .nav()
+                                    .current()
+                                    .expect("Navigation stack should have root");
+                                command = prompt_section(&previous)?;
+                            }
+                        }
+                    } else {
+                        command = prompt_for_command()?;
+                        ctx.nav().set_root(command.section());
+                    }
+                }
+            },
             CommandFlow::Exit => {
                 break;
             }
