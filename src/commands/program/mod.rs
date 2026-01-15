@@ -9,13 +9,9 @@ mod deploy;
 mod extend;
 mod upgrade;
 
-// pub use build::*;
-// pub use close::*;
-// pub use deploy::*;
-// pub use extend::*;
-// pub use upgrade::*;
+pub use deploy::deploy;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ProgramCommand {
     Deploy,
     Upgrade,
@@ -53,10 +49,10 @@ impl fmt::Display for ProgramCommand {
 }
 
 impl ProgramCommand {
-    pub async fn process_command(&self, _ctx: &ScillaContext) -> CommandFlow<()> {
+    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow<()> {
         match self {
             // import here the functions we build in the files
-            ProgramCommand::Deploy => todo!(),
+            ProgramCommand::Deploy => deploy(ctx).await,
             ProgramCommand::Upgrade => todo!(),
             ProgramCommand::Build => todo!(),
             ProgramCommand::Close => todo!(),

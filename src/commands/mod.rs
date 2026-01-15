@@ -2,7 +2,8 @@ use {
     crate::{
         commands::{
             account::AccountCommand, cluster::ClusterCommand, config::ConfigCommand,
-            stake::StakeCommand, transaction::TransactionCommand, vote::VoteCommand,
+            program::ProgramCommand, stake::StakeCommand, transaction::TransactionCommand,
+            vote::VoteCommand,
         },
         context::ScillaContext,
     },
@@ -39,6 +40,7 @@ pub enum Command {
     Cluster(ClusterCommand),
     Stake(StakeCommand),
     Account(AccountCommand),
+    Program(ProgramCommand),
     Vote(VoteCommand),
     Transaction(TransactionCommand),
     ScillaConfig(ConfigCommand),
@@ -51,6 +53,7 @@ impl Command {
             Command::Cluster(cluster_command) => cluster_command.process_command(ctx).await,
             Command::Stake(stake_command) => stake_command.process_command(ctx).await,
             Command::Account(account_command) => account_command.process_command(ctx).await,
+            Command::Program(program_command) => program_command.process_command(ctx).await,
             Command::Vote(vote_command) => vote_command.process_command(ctx).await,
             Command::Transaction(transaction_command) => {
                 transaction_command.process_command(ctx).await
@@ -64,6 +67,7 @@ impl Command {
 #[derive(Debug, Clone)]
 pub enum CommandGroup {
     Account,
+    Program,
     Cluster,
     Stake,
     Vote,
@@ -76,6 +80,7 @@ impl fmt::Display for CommandGroup {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let command = match self {
             CommandGroup::Account => "Account",
+            CommandGroup::Program => "Program",
             CommandGroup::Cluster => "Cluster",
             CommandGroup::Stake => "Stake",
             CommandGroup::Vote => "Vote",
