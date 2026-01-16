@@ -1,0 +1,53 @@
+[package]
+name = "scilla"
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+[dependencies]
+# core
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+bincode.workspace = true
+chrono.workspace = true
+base64.workspace = true
+bs58.workspace = true
+dirs.workspace = true
+toml.workspace = true
+
+# async
+tokio.workspace = true
+
+# cli / ui
+inquire.workspace = true
+console.workspace = true
+indicatif.workspace = true
+comfy-table.workspace = true
+
+# solana
+solana-vote-interface.workspace = true
+solana-instruction.workspace = true
+solana-message.workspace = true
+solana-stake-interface.workspace = true
+solana-transaction.workspace = true
+solana-account.workspace = true
+solana-epoch-info.workspace = true
+solana-rpc-client.workspace = true
+solana-rpc-client-api.workspace = true
+solana-sdk-ids.workspace = true
+solana-clock.workspace = true
+solana-sysvar.workspace = true
+solana-keypair.workspace = true
+solana-commitment-config.workspace = true
+solana-pubkey.workspace = true
+solana-signature.workspace = true
+solana-nonce.workspace = true
+solana-transaction-status.workspace = true
+solana-system-interface.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"
