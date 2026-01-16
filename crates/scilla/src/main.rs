@@ -48,7 +48,8 @@ async fn main() -> ScillaResult {
                 NavigationTarget::PreviousSection => {
                     // Check if we're in a nested scenario ( depth>=2 )
                     if ctx.get_nav_context_mut().is_nested() {
-                        // if we're the user should be able to choose if he wants to go to MainSection or PreviousSection
+                        // if we're the user should be able to choose if he wants to go to
+                        // MainSection or PreviousSection
                         match prompt_go_back() {
                             NavigationTarget::MainSection => {
                                 command = prompt_for_command()?;
@@ -63,7 +64,8 @@ async fn main() -> ScillaResult {
                                 command = prompt_section(&previous)?;
                             }
                         }
-                    // If we aren't in a nested scenario, the only possibility is to go to MainSection
+                    // If we aren't in a nested scenario, the only possibility
+                    // is to go to MainSection
                     } else {
                         command = prompt_for_command()?;
                         ctx.get_nav_context_mut().set_root(command.section());
