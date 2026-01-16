@@ -68,7 +68,7 @@ impl ScillaContext {
         Ok(())
     }
 
-    pub fn nav(&mut self) -> &mut NavContext {
+    pub fn get_nav_context_mut(&mut self) -> &mut NavContext {
         &mut self.navigation_context
     }
 }

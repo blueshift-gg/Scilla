@@ -29,33 +29,33 @@ async fn main() -> ScillaResult {
     let mut ctx = ScillaContext::try_from(config)?;
 
     let mut command = prompt_for_command()?;
-    ctx.nav().set_root(command.section());
+    ctx.get_nav_context_mut().set_root(command.section());
 
     loop {
         match command.process_command(&mut ctx).await {
             CommandFlow::Processed => {
                 let current = ctx
-                    .nav()
+                    .get_nav_context_mut()
                     .current()
                     .expect("Navigation stack should have root");
                 command = prompt_section(&current)?;
             }
             CommandFlow::NavigateTo(target) => match target {
-                NavigationTarget::MainMenu => {
+                NavigationTarget::MainSection => {
                     command = prompt_for_command()?;
-                    ctx.nav().set_root(command.section());
+                    ctx.get_nav_context_mut().set_root(command.section());
                 }
                 NavigationTarget::PreviousSection => {
-                    if ctx.nav().is_nested() {
+                    if ctx.get_nav_context_mut().is_nested() {
                         match prompt_go_back() {
-                            NavigationTarget::MainMenu => {
+                            NavigationTarget::MainSection => {
                                 command = prompt_for_command()?;
-                                ctx.nav().set_root(command.section());
+                                ctx.get_nav_context_mut().set_root(command.section());
                             }
                             NavigationTarget::PreviousSection => {
-                                ctx.nav().pop();
+                                ctx.get_nav_context_mut().pop();
                                 let previous = ctx
-                                    .nav()
+                                    .get_nav_context_mut()
                                     .current()
                                     .expect("Navigation stack should have root");
                                 command = prompt_section(&previous)?;
@@ -63,7 +63,7 @@ async fn main() -> ScillaResult {
                         }
                     } else {
                         command = prompt_for_command()?;
-                        ctx.nav().set_root(command.section());
+                        ctx.get_nav_context_mut().set_root(command.section());
                     }
                 }
             },

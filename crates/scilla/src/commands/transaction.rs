@@ -97,7 +97,7 @@ impl TransactionCommand {
                 .await;
             }
             TransactionCommand::GoBack => {
-                return CommandFlow::NavigateTo(NavigationTarget::MainMenu);
+                return CommandFlow::NavigateTo(NavigationTarget::MainSection);
             }
         }
 

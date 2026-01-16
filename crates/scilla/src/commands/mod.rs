@@ -28,7 +28,7 @@ pub enum CommandFlow {
 }
 
 pub enum NavigationTarget {
-    MainMenu,
+    MainSection,
     PreviousSection,
 }
 

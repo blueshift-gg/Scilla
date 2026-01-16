@@ -226,7 +226,7 @@ impl StakeCommand {
                 show_spinner(self.spinner_msg(), process_stake_history(ctx)).await;
             }
 
-            StakeCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
+            StakeCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainSection),
         }
 
         CommandFlow::Processed

@@ -1,7 +1,8 @@
 use crate::commands::CommandGroup;
 
 /// Maximum nesting depth for navigation (root + subsections).
-const MAX_DEPTH: usize = 3;
+/// Adjust this constant if deeper menu nesting is needed.
+const MAX_INTERACTION_DEPTH: usize = 3;
 
 /// Tracks the current navigation state as a stack of sections.
 ///
@@ -10,6 +11,7 @@ const MAX_DEPTH: usize = 3;
 /// - `set_root()` initializes with a top-level section
 /// - `current()` returns the active section for prompting
 /// - `pop()` navigates back (returns `None` if at root)
+/// - `push()` adds a new section to the navigation stack if capacity allows
 #[derive(Debug, Clone)]
 pub struct NavContext {
     stack: Vec<CommandGroup>,
@@ -24,7 +26,7 @@ impl Default for NavContext {
 impl NavContext {
     /// Creates an empty navigation context.
     pub fn new() -> Self {
-        let stack = Vec::with_capacity(MAX_DEPTH);
+        let stack = Vec::with_capacity(MAX_INTERACTION_DEPTH);
         Self { stack }
     }
 
@@ -51,10 +53,13 @@ impl NavContext {
     }
 
     /// Pushes a new section onto the navigation stack if capacity allows.
-    pub fn push(&mut self, section: CommandGroup) {
-        if self.stack.len() < MAX_DEPTH {
+    #[must_use]
+    pub fn push(&mut self, section: CommandGroup) -> bool {
+        if self.stack.len() < MAX_INTERACTION_DEPTH {
             self.stack.push(section);
+            return true;
         }
+        false
     }
 
     /// Returns `true` if the current section is nested within another section.

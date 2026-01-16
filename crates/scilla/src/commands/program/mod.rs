@@ -64,7 +64,7 @@ impl ProgramCommand {
             ProgramCommand::Build => todo!(),
             ProgramCommand::Close => todo!(),
             ProgramCommand::Extend => todo!(),
-            ProgramCommand::GoBack => CommandFlow::NavigateTo(NavigationTarget::MainMenu),
+            ProgramCommand::GoBack => CommandFlow::NavigateTo(NavigationTarget::MainSection),
         }
     }
 }

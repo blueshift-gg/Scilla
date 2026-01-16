@@ -85,7 +85,7 @@ impl ClusterCommand {
                 show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await;
             }
             ClusterCommand::GoBack => {
-                return CommandFlow::NavigateTo(NavigationTarget::MainMenu);
+                return CommandFlow::NavigateTo(NavigationTarget::MainSection);
             }
         }
 

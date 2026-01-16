@@ -288,13 +288,13 @@ pub fn prompt_section(section: &CommandGroup) -> anyhow::Result<Command> {
 pub fn prompt_go_back() -> NavigationTarget {
     let choice = Select::new(
         "Go Back to menu or last section",
-        vec!["Menu", "Last Section"],
+        vec!["Main Section", "Previous Section"],
     )
     .prompt()
     .unwrap();
     match choice {
-        "Menu" => NavigationTarget::MainMenu,
-        "Last Section" => NavigationTarget::PreviousSection,
+        "Main Section" => NavigationTarget::MainSection,
+        "Previous Section" => NavigationTarget::PreviousSection,
         _ => unreachable!(),
     }
 }

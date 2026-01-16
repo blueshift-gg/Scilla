@@ -93,7 +93,7 @@ impl AccountCommand {
                 show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
             }
             AccountCommand::GoBack => {
-                return CommandFlow::NavigateTo(NavigationTarget::MainMenu);
+                return CommandFlow::NavigateTo(NavigationTarget::MainSection);
             }
         }
 

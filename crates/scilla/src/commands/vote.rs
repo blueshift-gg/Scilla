@@ -153,7 +153,7 @@ impl VoteCommand {
                 )
                 .await;
             }
-            VoteCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
+            VoteCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainSection),
         }
 
         CommandFlow::Processed

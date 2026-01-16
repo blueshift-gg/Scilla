@@ -103,7 +103,7 @@ impl ConfigCommand {
         let res = match self {
             ConfigCommand::Show => show_config(ctx),
             ConfigCommand::Edit => edit_config(ctx),
-            ConfigCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainMenu),
+            ConfigCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainSection),
         };
 
         if let Err(e) = res {
