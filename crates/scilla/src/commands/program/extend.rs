@@ -15,12 +15,12 @@ use {
     solana_loader_v3_interface::{instruction::extend_program, state::UpgradeableLoaderState},
     solana_pubkey::Pubkey,
     solana_sdk_ids::bpf_loader_upgradeable,
-    std::fs,
+    std::{fs, path::PathBuf},
 };
 
 pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
     let program_address: Pubkey = prompt_input_data("Enter Program Address: ");
-    let program_path: String = prompt_input_data("Enter Program File Path: ");
+    let program_path: PathBuf = prompt_input_data("Enter Program File Path: ");
 
     let program_file_size = match fs::metadata(&program_path) {
         Ok(metadata) => metadata.len() as usize,
@@ -91,7 +91,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
         ])
         .add_row(vec![
             Cell::new("Program File Path"),
-            Cell::new(program_path),
+            Cell::new(program_path.display().to_string()),
         ])
         .add_row(vec![
             Cell::new("Program File Size"),
@@ -192,8 +192,8 @@ async fn calculate_extension_cost(
 
     if new_size > MAX_PERMITTED_DATA_LENGTH {
         bail!(
-            "New account size ({} bytes) would exceed the maximum permitted size of {} bytes \
-             (10MB). Current size: {} bytes, additional bytes: {} bytes",
+            "New account size ({} bytes) would exceed Solana's maximum permitted account size of \
+             {} bytes (10MB). Current size: {} bytes, additional bytes: {} bytes",
             new_size,
             MAX_PERMITTED_DATA_LENGTH,
             current_size,
