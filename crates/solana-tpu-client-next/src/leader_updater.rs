@@ -18,11 +18,12 @@ pub trait LeaderUpdater: Send {
     /// Returns next leaders for the next `lookahead_leaders` starting from
     /// current estimated slot.
     ///
-    /// Leaders are returned per [`NUM_CONSECUTIVE_LEADER_SLOTS`] to avoid unnecessary repetition.
+    /// Leaders are returned per [`NUM_CONSECUTIVE_LEADER_SLOTS`] to avoid
+    /// unnecessary repetition.
     ///
-    /// If the current leader estimation is incorrect and transactions are sent to
-    /// only one estimated leader, there is a risk of losing all the transactions,
-    /// depending on the forwarding policy.
+    /// If the current leader estimation is incorrect and transactions are sent
+    /// to only one estimated leader, there is a risk of losing all the
+    /// transactions, depending on the forwarding policy.
     fn next_leaders(&mut self, lookahead_leaders: usize) -> Vec<SocketAddr>;
 
     /// Stop [`LeaderUpdater`] and releases all associated resources.

@@ -19,12 +19,13 @@ pub use {
     solana_tls_utils::QuicClientCertificate,
 };
 
-/// QUIC connection idle timeout. The value is negotiated between client and server.
+/// QUIC connection idle timeout. The value is negotiated between client and
+/// server.
 pub const QUIC_MAX_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// QUIC_KEEP_ALIVE controls how often to send PING frames to keep the connection alive. This value
-/// is set conservatively to 1sec because on the mnb many validators use legacy value of 2sec
-/// connection timeout.
+/// QUIC_KEEP_ALIVE controls how often to send PING frames to keep the
+/// connection alive. This value is set conservatively to 1sec because on the
+/// mnb many validators use legacy value of 2sec connection timeout.
 pub const QUIC_KEEP_ALIVE: Duration = Duration::from_secs(1);
 
 pub(crate) fn create_client_config(client_certificate: &QuicClientCertificate) -> ClientConfig {

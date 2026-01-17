@@ -1,5 +1,5 @@
-//! This module provides [`SlotUpdateService`] that is used to get slot updates using provided
-//! stream.
+//! This module provides [`SlotUpdateService`] that is used to get slot updates
+//! using provided stream.
 use {
     crate::{
         logging::info,
@@ -13,8 +13,8 @@ use {
     tokio_util::sync::CancellationToken,
 };
 
-/// [`SlotUpdateService`] updates the current slot by subscribing to the slot updates using provided
-/// stream.
+/// [`SlotUpdateService`] updates the current slot by subscribing to the slot
+/// updates using provided stream.
 pub struct SlotUpdateService {
     handle: Option<JoinHandle<Result<(), Error>>>,
     cancel: CancellationToken,

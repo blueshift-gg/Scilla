@@ -12,7 +12,8 @@ use {
     },
 };
 
-/// [`SendTransactionStats`] aggregates counters related to sending transactions.
+/// [`SendTransactionStats`] aggregates counters related to sending
+/// transactions.
 #[derive(Debug, Default)]
 pub struct SendTransactionStats {
     pub successfully_sent: AtomicU64,
@@ -167,9 +168,9 @@ impl fmt::Display for SendTransactionStats {
     }
 }
 
-/// For external use it is useful to have direct access to data and `PartialEq` but
-/// we cannot have that on top of atomics. This macro creates a structure with the same
-/// fields but of type u64.
+/// For external use it is useful to have direct access to data and `PartialEq`
+/// but we cannot have that on top of atomics. This macro creates a structure
+/// with the same fields but of type u64.
 macro_rules! define_non_atomic_struct_for {
     ($name:ident, $atomic_name:ident, {$($field:ident),* $(,)?}) => {
         #[derive(Debug, Default, PartialEq)]

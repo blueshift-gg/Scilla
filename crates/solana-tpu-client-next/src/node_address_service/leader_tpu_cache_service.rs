@@ -1,6 +1,6 @@
-//! This module provides [`LeaderTpuCacheService`] structure along with [`LeaderUpdateReceiver`],
-//! [`Config`]. [`LeaderTpuCacheService`] tracks the current and upcoming Solana leader nodes and
-//! their TPU socket addresses.
+//! This module provides [`LeaderTpuCacheService`] structure along with
+//! [`LeaderUpdateReceiver`], [`Config`]. [`LeaderTpuCacheService`] tracks the
+//! current and upcoming Solana leader nodes and their TPU socket addresses.
 #![allow(clippy::arithmetic_side_effects)]
 use {
     crate::{
@@ -9,7 +9,7 @@ use {
         node_address_service::SlotReceiver,
     },
     async_trait::async_trait,
-    solana_clock::{Slot, NUM_CONSECUTIVE_LEADER_SLOTS},
+    solana_clock::{NUM_CONSECUTIVE_LEADER_SLOTS, Slot},
     solana_commitment_config::CommitmentConfig,
     solana_pubkey::Pubkey,
     solana_rpc_client::nonblocking::rpc_client::RpcClient,
@@ -22,7 +22,7 @@ use {
     tokio::{
         sync::watch,
         task::JoinHandle,
-        time::{interval, Duration},
+        time::{Duration, interval},
     },
     tokio_util::sync::CancellationToken,
 };
@@ -51,9 +51,9 @@ impl Default for Config {
     }
 }
 
-/// [`LeaderTpuCacheService`] is a background task that tracks the current and upcoming Solana
-/// leader nodes and updates their TPU socket addresses encapsulated in [`LeaderUpdateReceiver`] for
-/// downstream consumers.
+/// [`LeaderTpuCacheService`] is a background task that tracks the current and
+/// upcoming Solana leader nodes and updates their TPU socket addresses
+/// encapsulated in [`LeaderUpdateReceiver`] for downstream consumers.
 pub struct LeaderTpuCacheService {
     handle: Option<JoinHandle<Result<(), Error>>>,
     cancel: CancellationToken,
@@ -78,9 +78,10 @@ impl LeaderUpdateReceiver {
     }
 }
 
-/// [`NodesTpuInfo`] holds the TPU addresses of the nodes scheduled to be leaders for upcoming
-/// slots. The `extend` flag indicates whether the list of leaders was extended by one to account
-/// for the case when the current slot is the last slot in a leader's consecutive slots.
+/// [`NodesTpuInfo`] holds the TPU addresses of the nodes scheduled to be
+/// leaders for upcoming slots. The `extend` flag indicates whether the list of
+/// leaders was extended by one to account for the case when the current slot is
+/// the last slot in a leader's consecutive slots.
 #[derive(Clone)]
 struct NodesTpuInfo {
     leaders: Vec<SocketAddr>,
@@ -147,6 +148,7 @@ impl LeaderTpuCacheService {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_loop(
         cluster_info: Arc<impl ClusterInfoProvider + 'static>,
         mut slot_receiver: SlotReceiver,
@@ -232,9 +234,10 @@ pub enum Error {
     InitializationFailed,
 }
 
-/// [`ClusterInfoProvider`] provides information about the cluster such as epoch info, node tpu
-/// addresses, and leader schedule. Beside of that it also provides the initial slot to start from
-/// which is called once during initialization. All this information is required by
+/// [`ClusterInfoProvider`] provides information about the cluster such as epoch
+/// info, node tpu addresses, and leader schedule. Beside of that it also
+/// provides the initial slot to start from which is called once during
+/// initialization. All this information is required by
 /// [`LeaderTpuCacheService`] to estimate the next leader.
 #[async_trait]
 pub trait ClusterInfoProvider: Send + Sync {
@@ -281,11 +284,12 @@ async fn update_leader_info(
     Ok(())
 }
 
-/// Get the TPU sockets for slots starting from `first_slot` and until `first_slot +
-/// lookahead_leaders * NUM_CONSECUTIVE_LEADER_SLOTS`.
+/// Get the TPU sockets for slots starting from `first_slot` and until
+/// `first_slot + lookahead_leaders * NUM_CONSECUTIVE_LEADER_SLOTS`.
 ///
-/// If it returns an empty vector, it might mean that we overran the local leader schedule cache or,
-/// less probable, that there is no TPU info available for corresponding slot leaders.
+/// If it returns an empty vector, it might mean that we overran the local
+/// leader schedule cache or, less probable, that there is no TPU info available
+/// for corresponding slot leaders.
 fn leader_sockets(
     first_slot: Slot,
     lookahead_leaders: u8,
@@ -294,8 +298,9 @@ fn leader_sockets(
 ) -> Vec<SocketAddr> {
     let fanout_slots = (lookahead_leaders as u64).saturating_mul(NUM_CONSECUTIVE_LEADER_SLOTS);
     let mut leader_sockets = Vec::with_capacity(lookahead_leaders as usize);
-    // `slot_leaders.first_slot` might have been advanced since caller last read it. Take the
-    // greater of the two values to ensure we are reading from the latest leader schedule.
+    // `slot_leaders.first_slot` might have been advanced since caller last read it.
+    // Take the greater of the two values to ensure we are reading from the
+    // latest leader schedule.
     let current_slot = std::cmp::max(first_slot, slot_leaders.first_slot);
     for leader_slot in
         (current_slot..current_slot + fanout_slots).step_by(NUM_CONSECUTIVE_LEADER_SLOTS as usize)
@@ -343,16 +348,16 @@ async fn initialize_state(
                 .ok();
         }
 
-        if let Some(epoch_info) = &epoch_info {
-            if slot_leaders.is_none() {
-                slot_leaders = SlotLeaders::new(
-                    cluster_info,
-                    slot_receiver.slot(),
-                    epoch_info.slots_in_epoch,
-                )
-                .await
-                .ok();
-            }
+        if let Some(epoch_info) = &epoch_info
+            && slot_leaders.is_none()
+        {
+            slot_leaders = SlotLeaders::new(
+                cluster_info,
+                slot_receiver.slot(),
+                epoch_info.slots_in_epoch,
+            )
+            .await
+            .ok();
         }
         if leader_tpu_map.is_some() && epoch_info.is_some() && slot_leaders.is_some() {
             return Ok((
@@ -430,7 +435,8 @@ impl LeaderTpuMap {
     }
 }
 
-/// Structure [`SlotLeaders`] provides a view on the leaders schedule starting from `first_slot`.
+/// Structure [`SlotLeaders`] provides a view on the leaders schedule starting
+/// from `first_slot`.
 #[derive(PartialEq, Debug)]
 struct SlotLeaders {
     first_slot: Slot,
@@ -438,9 +444,11 @@ struct SlotLeaders {
 }
 
 impl SlotLeaders {
-    /// Creates a new [`SlotLeaders`] instance by fetching slot leaders up to `slots_limit`.
+    /// Creates a new [`SlotLeaders`] instance by fetching slot leaders up to
+    /// `slots_limit`.
     ///
-    /// Note, that if it managed to fetch less slot leaders than requested, it will still succeed.
+    /// Note, that if it managed to fetch less slot leaders than requested, it
+    /// will still succeed.
     async fn new(
         cluster_info: &impl ClusterInfoProvider,
         first_slot: Slot,
@@ -461,7 +469,8 @@ impl SlotLeaders {
             .and_then(|index| self.leaders.get(index as usize))
     }
 
-    /// Returns `Some(true)` if the given `slot` is the last slot in the leader consecutive slots.
+    /// Returns `Some(true)` if the given `slot` is the last slot in the leader
+    /// consecutive slots.
     fn is_leader_last_consecutive_slot(&self, slot: Slot) -> Option<bool> {
         slot.checked_sub(self.first_slot).and_then(|index| {
             let index = index as usize;
@@ -514,11 +523,14 @@ impl ClusterInfoProvider for RpcClient {
         Ok((slots_in_epoch, last_slot_in_epoch))
     }
 
-    /// Returns the slot leaders starting from `first_slot` until `first_slot + slots_limit`.
+    /// Returns the slot leaders starting from `first_slot` until `first_slot +
+    /// slots_limit`.
     ///
-    /// Partial results may be returned if `slots_limit` exceeds the maximum number of slots.
+    /// Partial results may be returned if `slots_limit` exceeds the maximum
+    /// number of slots.
     async fn slot_leaders(&self, first_slot: Slot, slots_limit: u64) -> Result<Vec<Pubkey>, Error> {
-        // `2` is used to avoid refetching the leaders until the middle of the requested range.
+        // `2` is used to avoid refetching the leaders until the middle of the requested
+        // range.
         let max_slots_to_fetch = (2 * MAX_FANOUT_SLOTS).min(slots_limit);
         let slot_leaders = self.get_slot_leaders(first_slot, max_slots_to_fetch).await;
         debug!("Fetched slot leaders from slot {first_slot} for {slots_limit}. ");

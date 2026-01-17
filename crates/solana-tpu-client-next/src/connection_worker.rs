@@ -1,14 +1,14 @@
-//! This module defines [`ConnectionWorker`] which encapsulates the functionality
-//! needed to handle one connection within the scope of task.
+//! This module defines [`ConnectionWorker`] which encapsulates the
+//! functionality needed to handle one connection within the scope of task.
 
 use {
     super::SendTransactionStats,
     crate::{
+        QuicError,
         logging::{debug, error, trace, warn},
         quic_networking::send_data_over_stream,
         send_transaction_stats::record_error,
         transaction_batch::TransactionBatch,
-        QuicError,
     },
     quinn::{ConnectError, Connection, ConnectionError, Endpoint},
     solana_clock::{DEFAULT_MS_PER_SLOT, MAX_PROCESSING_AGE, NUM_CONSECUTIVE_LEADER_SLOTS},
@@ -17,18 +17,18 @@ use {
     solana_tls_utils::socket_addr_to_quic_server_name,
     std::{
         net::SocketAddr,
-        sync::{atomic::Ordering, Arc},
+        sync::{Arc, atomic::Ordering},
     },
     tokio::{
         sync::mpsc,
-        time::{sleep, timeout, Duration},
+        time::{Duration, sleep, timeout},
     },
     tokio_util::sync::CancellationToken,
 };
 
 /// The maximum connection handshake timeout for QUIC connections.
-/// This is set to 2 seconds, which was the earlier shorter connection idle timeout
-/// which was also used by QUINN to timeout connection handshake.
+/// This is set to 2 seconds, which was the earlier shorter connection idle
+/// timeout which was also used by QUINN to timeout connection handshake.
 pub(crate) const DEFAULT_MAX_CONNECTION_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Interval between retry attempts for creating a new connection. This value is
@@ -131,8 +131,9 @@ impl ConnectionWorker {
     ///
     /// This method manages the connection to the peer and handles state
     /// transitions. It runs indefinitely until the connection is closed or an
-    /// unrecoverable error occurs. The worker monitors both incoming transactions
-    /// and connection health simultaneously when in the Active state.
+    /// unrecoverable error occurs. The worker monitors both incoming
+    /// transactions and connection health simultaneously when in the Active
+    /// state.
     pub async fn run(&mut self) {
         let cancel = self.cancel.clone();
 
@@ -267,7 +268,8 @@ impl ConnectionWorker {
     ///
     /// The method checks connection health before sending each transaction to
     /// avoid operations on a closed connection. In case of error, it doesn't
-    /// retry to send the same transactions again but transitions to retry state.
+    /// retry to send the same transactions again but transitions to retry
+    /// state.
     async fn send_transactions(&mut self, connection: Connection, transactions: TransactionBatch) {
         let now = timestamp();
         if !self.skip_check_transaction_age

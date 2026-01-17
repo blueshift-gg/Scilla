@@ -1,5 +1,5 @@
-//! This module defines [`WorkersCache`] along with aux struct [`WorkerInfo`]. These
-//! structures provide mechanisms for caching workers, sending transaction
+//! This module defines [`WorkersCache`] along with aux struct [`WorkerInfo`].
+//! These structures provide mechanisms for caching workers, sending transaction
 //! batches, and gathering send transaction statistics.
 
 use {
@@ -108,13 +108,13 @@ pub fn spawn_worker(
     WorkerInfo::new(txs_sender, handle, cancel)
 }
 
-/// [`WorkersCache`] manages and caches workers. It uses an LRU cache to store and
-/// manage workers. It also tracks transaction statistics for each peer.
+/// [`WorkersCache`] manages and caches workers. It uses an LRU cache to store
+/// and manage workers. It also tracks transaction statistics for each peer.
 pub struct WorkersCache {
     workers: LruCache<SocketAddr, WorkerInfo>,
 
-    /// Indicates that the `WorkersCache` is been `shutdown()`, interrupting any outstanding
-    /// `send_transactions_to_address()` invocations.
+    /// Indicates that the `WorkersCache` is been `shutdown()`, interrupting any
+    /// outstanding `send_transactions_to_address()` invocations.
     cancel: CancellationToken,
 }
 
@@ -174,6 +174,7 @@ impl WorkersCache {
     /// Ensures a worker exists for the given peer, creating one if necessary.
     ///
     /// Returns any evicted worker that needs shutdown.
+    #[allow(clippy::too_many_arguments)]
     pub fn ensure_worker(
         &mut self,
         peer: SocketAddr,

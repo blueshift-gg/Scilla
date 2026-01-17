@@ -11,13 +11,14 @@
 //!
 //! Tpu-client-next supports three features:
 //!
-//! - **`metrics`**: Enables implementation of the method `report_to_influxdb` for
-//!   [`SendTransactionStats`] structure.
+//! - **`metrics`**: Enables implementation of the method `report_to_influxdb`
+//!   for [`SendTransactionStats`] structure.
 //! - **`log`**: Enables logging using `log` crate. It is enabled by default.
-//! - **`tracing`**: Enables logging using `tracing` crate instead of `log`. This feature is
-//!   mutually exclusive with `log`.
+//! - **`tracing`**: Enables logging using `tracing` crate instead of `log`.
+//!   This feature is mutually exclusive with `log`.
 //! - **`websocket-node-address-service`**: Enables implementation of
-//!   `WebsocketNodeAddressService` that provides slot updates via WebSocket interface.
+//!   `WebsocketNodeAddressService` that provides slot updates via WebSocket
+//!   interface.
 
 pub mod client_builder;
 pub(crate) mod connection_worker;

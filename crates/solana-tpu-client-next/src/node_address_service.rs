@@ -1,15 +1,17 @@
-//! This module provides [`NodeAddressService`] structure that implements [`LeaderUpdater`] trait to
-//! track upcoming leaders and maintains an up-to-date mapping of leader id to TPU socket address.
+//! This module provides [`NodeAddressService`] structure that implements
+//! [`LeaderUpdater`] trait to track upcoming leaders and maintains an
+//! up-to-date mapping of leader id to TPU socket address.
 //!
 //! # Examples
 //!
-//! This example shows how to use [`NodeAddressService`] to implement [`LeaderUpdater`] using some
-//! custom slot update provider. Typically, it can be done with zero-cost abstraction as shown
-//! below. The case of `WebSocketNodeAddressService` requires, contrary, introducing task and
+//! This example shows how to use [`NodeAddressService`] to implement
+//! [`LeaderUpdater`] using some custom slot update provider. Typically, it can
+//! be done with zero-cost abstraction as shown below. The case of
+//! `WebSocketNodeAddressService` requires, contrary, introducing task and
 //! channel due to specifics of the PubsubClient API implementation.
 //!
-//! For the sake of the example, let's assume we have some custom slot updates that we receive by
-//! UDP.
+//! For the sake of the example, let's assume we have some custom slot updates
+//! that we receive by UDP.
 //!
 //! ```ignore
 //!  use async_stream::stream;
@@ -64,7 +66,6 @@
 //!    }
 //! }
 //! ```
-//!
 use {
     crate::{
         leader_updater::LeaderUpdater,
@@ -98,9 +99,9 @@ pub use {
     slot_update_service::SlotUpdateService,
 };
 
-/// [`NodeAddressService`] is a convenience wrapper for [`SlotUpdateService`] and
-/// [`LeaderTpuCacheService`] to track upcoming leaders and maintains an up-to-date mapping of
-/// leader id to TPU socket address.
+/// [`NodeAddressService`] is a convenience wrapper for [`SlotUpdateService`]
+/// and [`LeaderTpuCacheService`] to track upcoming leaders and maintains an
+/// up-to-date mapping of leader id to TPU socket address.
 pub struct NodeAddressService {
     leaders_receiver: LeaderUpdateReceiver,
     slot_receiver: SlotReceiver,
@@ -111,13 +112,15 @@ pub struct NodeAddressService {
 impl NodeAddressService {
     /// Run the [`NodeAddressService`].
     ///
-    /// On success it starts [`SlotUpdateService`] together with [`LeaderTpuCacheService`] and
-    /// returns [`NodeAddressService`] instance which provides method to fetch next leaders. To run
-    /// mentioned services, it takes `cluster_info_provider` which abstracts access to information
-    /// about the cluster (see [`ClusterInfoProvider`]), `slot_update_stream` provides stream of
-    /// slot updates, `start_slot` is the initial slot to start from, `config` provides
-    /// configuration for the leader TPU cache service, and finally `cancel` is a cancellation token
-    /// to stop the service.
+    /// On success it starts [`SlotUpdateService`] together with
+    /// [`LeaderTpuCacheService`] and returns [`NodeAddressService`]
+    /// instance which provides method to fetch next leaders. To run
+    /// mentioned services, it takes `cluster_info_provider` which abstracts
+    /// access to information about the cluster (see
+    /// [`ClusterInfoProvider`]), `slot_update_stream` provides stream of
+    /// slot updates, `start_slot` is the initial slot to start from, `config`
+    /// provides configuration for the leader TPU cache service, and finally
+    /// `cancel` is a cancellation token to stop the service.
     ///
     /// On failure, it will return appropriate error.
     pub async fn run(

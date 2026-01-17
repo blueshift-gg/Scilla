@@ -43,7 +43,7 @@ solana-epoch-schedule = "3.0.0"
 solana-keypair = "3.1.0"
 solana-measure = "3.1.6"
 solana-metrics = { version = "3.1.6", optional = true }       # optional
-solana-pubkey = "3.0.0"
+solana-pubkey = "4.0.0"
 solana-pubsub-client = { version = "3.1.6", optional = true } # optional
 solana-rpc-client = "3.1.6"
 solana-rpc-client-api = "3.1.6"

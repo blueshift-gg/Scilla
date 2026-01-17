@@ -1,5 +1,5 @@
-//! This module provides [`WebsocketNodeAddressService`] that is used to get slot
-//! updates via WebSocket interface.
+//! This module provides [`WebsocketNodeAddressService`] that is used to get
+//! slot updates via WebSocket interface.
 use {
     crate::{
         leader_updater::LeaderUpdater,

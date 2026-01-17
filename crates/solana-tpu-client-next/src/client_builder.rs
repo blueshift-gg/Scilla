@@ -1,11 +1,13 @@
-//! This module provides a [`ClientBuilder`] structure that builds [`TransactionSender`] and [`Client`].
+//! This module provides a [`ClientBuilder`] structure that builds
+//! [`TransactionSender`] and [`Client`].
 //!
-//! TPU client establishes connections to TPU nodes. To avoid recreating these connections every
-//! leader window, it is desirable to cache them and orchestrate their usage which is implemented in
-//! [`ConnectionWorkersScheduler`]. [`ClientBuilder`] hides the complexity of creating scheduler and
-//! provides a simple but configurable way to create [`TransactionSender`] and [`Client`].
-//! [`TransactionSender`] is used to send transactions in batches while [`Client`] runs the
-//! background tasks.
+//! TPU client establishes connections to TPU nodes. To avoid recreating these
+//! connections every leader window, it is desirable to cache them and
+//! orchestrate their usage which is implemented in
+//! [`ConnectionWorkersScheduler`]. [`ClientBuilder`] hides the complexity of
+//! creating scheduler and provides a simple but configurable way to create
+//! [`TransactionSender`] and [`Client`]. [`TransactionSender`] is used to send
+//! transactions in batches while [`Client`] runs the background tasks.
 //!
 //! # Example
 //!
@@ -41,13 +43,13 @@
 //! ```
 use {
     crate::{
+        ConnectionWorkersScheduler, ConnectionWorkersSchedulerError, SendTransactionStats,
         connection_workers_scheduler::{
             BindTarget, ConnectionWorkersSchedulerConfig, Fanout, NonblockingBroadcaster,
             StakeIdentity, WorkersBroadcaster,
         },
         leader_updater::LeaderUpdater,
         transaction_batch::TransactionBatch,
-        ConnectionWorkersScheduler, ConnectionWorkersSchedulerError, SendTransactionStats,
     },
     solana_keypair::Keypair,
     std::{future::Future, net::UdpSocket, pin::Pin, sync::Arc},
@@ -64,8 +66,8 @@ use {
 #[derive(Clone)]
 pub struct TransactionSender(mpsc::Sender<TransactionBatch>);
 
-/// [`Client`] runs the background tasks required for sending transactions and update certificate
-/// used the endpoint.
+/// [`Client`] runs the background tasks required for sending transactions and
+/// update certificate used the endpoint.
 pub struct Client {
     update_certificate_sender: watch::Sender<Option<StakeIdentity>>,
     scheduler_handle:
@@ -73,7 +75,8 @@ pub struct Client {
     reporter_handle: Option<CancellableHandle<()>>,
 }
 
-/// [`ClientBuilder`] is a builder structure to create [`TransactionSender`] along with [`Client`].
+/// [`ClientBuilder`] is a builder structure to create [`TransactionSender`]
+/// along with [`Client`].
 pub struct ClientBuilder {
     runtime_handle: Option<runtime::Handle>,
     leader_updater: Box<dyn LeaderUpdater>,
@@ -111,10 +114,12 @@ impl ClientBuilder {
         }
     }
 
-    /// Set the runtime handle for the client. If not set, the current runtime will be used.
+    /// Set the runtime handle for the client. If not set, the current runtime
+    /// will be used.
     ///
-    /// Note that if the runtime handle is not set, the caller must ensure that the `build` is
-    /// called in tokio runtime context. Otherwise, `build` will panic.
+    /// Note that if the runtime handle is not set, the caller must ensure that
+    /// the `build` is called in tokio runtime context. Otherwise, `build`
+    /// will panic.
     pub fn runtime_handle(mut self, handle: runtime::Handle) -> Self {
         self.runtime_handle = Some(handle);
         self
@@ -146,9 +151,10 @@ impl ClientBuilder {
 
     /// Set the cancellation token for the client.
     ///
-    /// This token is used to create child tokens for the scheduler and reporter tasks. It is useful
-    /// if user wants to immediately cancel all internal tasks, otherwise calling `Client::shutdown`
-    /// is prefered way because it ensures orderly shutdown of internal tasks, see
+    /// This token is used to create child tokens for the scheduler and reporter
+    /// tasks. It is useful if user wants to immediately cancel all internal
+    /// tasks, otherwise calling `Client::shutdown` is prefered way because
+    /// it ensures orderly shutdown of internal tasks, see
     /// `Client::shutdown` for details.
     pub fn cancel_token(mut self, cancel: CancellationToken) -> Self {
         self.cancel_scheduler = cancel.child_token();
@@ -158,7 +164,8 @@ impl ClientBuilder {
 
     /// Set the worker channel size.
     ///
-    /// See [`ConnectionWorkersSchedulerConfig::worker_channel_size`] for details.
+    /// See [`ConnectionWorkersSchedulerConfig::worker_channel_size`] for
+    /// details.
     pub fn worker_channel_size(mut self, size: usize) -> Self {
         self.worker_channel_size = size;
         self
@@ -184,7 +191,8 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the reporting function which runs in the background to report metrics.
+    /// Set the reporting function which runs in the background to report
+    /// metrics.
     pub fn metric_reporter<F, Fut>(mut self, f: F) -> Self
     where
         F: FnOnce(Arc<SendTransactionStats>, CancellationToken) -> Fut + Send + Sync + 'static,
@@ -194,7 +202,8 @@ impl ClientBuilder {
         self
     }
 
-    /// Build the [`TransactionSender`] and [`Client`] using the provided configuration.
+    /// Build the [`TransactionSender`] and [`Client`] using the provided
+    /// configuration.
     pub fn build(self) -> Result<(TransactionSender, Client), ClientBuilderError> {
         let bind = self.bind_target.ok_or(ClientBuilderError::Misconfigured)?;
         let (sender, receiver) = mpsc::channel(self.sender_channel_size);
@@ -292,9 +301,10 @@ impl Client {
 
     /// Shutdown the client and all its internal tasks in an orderly manner.
     ///
-    /// Note that the token provided by user in `Builder` is not cancelled, only internal child
-    /// tokens are cancelled. If user, instead, calls cancel on the provided token directly, the
-    /// order of internal tasks shutdown is not guaranteed, which means that it might happen that
+    /// Note that the token provided by user in `Builder` is not cancelled, only
+    /// internal child tokens are cancelled. If user, instead, calls cancel
+    /// on the provided token directly, the order of internal tasks shutdown
+    /// is not guaranteed, which means that it might happen that
     /// some metrics are not reported. This might metter for the test code.
     pub async fn shutdown(self) -> Result<(), ClientError> {
         self.scheduler_handle.shutdown().await??;

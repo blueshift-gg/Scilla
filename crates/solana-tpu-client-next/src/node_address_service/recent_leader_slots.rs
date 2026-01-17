@@ -1,7 +1,8 @@
 //! This module provides [`RecentLeaderSlots`] to track recent leader slots.
 use {crate::node_address_service::SlotEvent, solana_clock::Slot, std::collections::VecDeque};
 
-// 48 chosen because it's unlikely that 12 leaders in a row will miss their slots
+// 48 chosen because it's unlikely that 12 leaders in a row will miss their
+// slots
 const MAX_SLOT_SKIP_DISTANCE: u64 = 48;
 
 const RECENT_LEADER_SLOTS_CAPACITY: usize = 48;
@@ -43,8 +44,8 @@ impl RecentLeaderSlots {
                 .then_with(|| b.is_start().cmp(&a.is_start())) // true before false
         });
 
-        // Validators can broadcast invalid blocks that are far in the future so check if the
-        // current slot is in line with the recent progression.
+        // Validators can broadcast invalid blocks that are far in the future so check
+        // if the current slot is in line with the recent progression.
         let max_index = recent_slots.len() - 1;
         let median_index = max_index / 2;
         let median_recent_slot = recent_slots[median_index].slot();

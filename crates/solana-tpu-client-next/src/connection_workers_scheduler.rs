@@ -4,14 +4,14 @@
 use {
     super::leader_updater::LeaderUpdater,
     crate::{
+        SendTransactionStats,
         connection_worker::DEFAULT_MAX_CONNECTION_HANDSHAKE_TIMEOUT,
         logging::debug,
         quic_networking::{
-            create_client_config, create_client_endpoint, QuicClientCertificate, QuicError,
+            QuicClientCertificate, QuicError, create_client_config, create_client_endpoint,
         },
         transaction_batch::TransactionBatch,
-        workers_cache::{shutdown_worker, WorkersCache, WorkersCacheError},
-        SendTransactionStats,
+        workers_cache::{WorkersCache, WorkersCacheError, shutdown_worker},
     },
     async_trait::async_trait,
     quinn::{ClientConfig, Endpoint},
@@ -55,9 +55,9 @@ pub enum ConnectionWorkersSchedulerError {
 /// be targeted when sending transactions and connecting.
 ///
 /// Note, that the unit is number of leaders per
-/// [`solana_clock::NUM_CONSECUTIVE_LEADER_SLOTS`]. It means that if the leader schedule is
-/// [L1, L1, L1, L1, L1, L1, L1, L1, L2, L2, L2, L2], the leaders per
-/// consecutive leader slots are [L1, L1, L2], so there are 3 of them.
+/// [`solana_clock::NUM_CONSECUTIVE_LEADER_SLOTS`]. It means that if the leader
+/// schedule is [L1, L1, L1, L1, L1, L1, L1, L1, L2, L2, L2, L2], the leaders
+/// per consecutive leader slots are [L1, L1, L2], so there are 3 of them.
 ///
 /// The idea of having a separate `connect` parameter is to create a set of
 /// nodes to connect to in advance in order to hide the latency of opening new
@@ -109,12 +109,13 @@ pub enum BindTarget {
     Socket(UdpSocket),
 }
 
-/// The [`StakeIdentity`] structure provides a convenient abstraction for handling
-/// [`Keypair`] when creating a QUIC certificate. Since `Keypair` does not implement
-/// [`Clone`], it cannot be moved in situations where [`ConnectionWorkersSchedulerConfig`]
-/// needs to be transferred. This wrapper structure allows the use of either a `Keypair`
-/// or a `&Keypair` to create a certificate, which is stored internally and later
-/// consumed by [`ConnectionWorkersScheduler`] to create an endpoint.
+/// The [`StakeIdentity`] structure provides a convenient abstraction for
+/// handling [`Keypair`] when creating a QUIC certificate. Since `Keypair` does
+/// not implement [`Clone`], it cannot be moved in situations where
+/// [`ConnectionWorkersSchedulerConfig`] needs to be transferred. This wrapper
+/// structure allows the use of either a `Keypair` or a `&Keypair` to create a
+/// certificate, which is stored internally and later consumed by
+/// [`ConnectionWorkersScheduler`] to create an endpoint.
 pub struct StakeIdentity(QuicClientCertificate);
 
 impl StakeIdentity {
@@ -195,15 +196,16 @@ impl ConnectionWorkersScheduler {
             .await
     }
 
-    /// Starts the scheduler, which manages the distribution of transactions to the network's
-    /// upcoming leaders. `broadcaster` allows to customize the way transactions are send to the
-    /// leaders, see [`WorkersBroadcaster`].
+    /// Starts the scheduler, which manages the distribution of transactions to
+    /// the network's upcoming leaders. `broadcaster` allows to customize
+    /// the way transactions are send to the leaders, see
+    /// [`WorkersBroadcaster`].
     ///
-    /// Runs the main loop that handles worker scheduling and management for connections. Returns
-    /// [`SendTransactionStats`] or an error.
+    /// Runs the main loop that handles worker scheduling and management for
+    /// connections. Returns [`SendTransactionStats`] or an error.
     ///
-    /// Importantly, if some transactions were not delivered due to network problems, they will not
-    /// be retried when the problem is resolved.
+    /// Importantly, if some transactions were not delivered due to network
+    /// problems, they will not be retried when the problem is resolved.
     pub async fn run_with_broadcaster(
         self,
         ConnectionWorkersSchedulerConfig {
@@ -353,10 +355,12 @@ impl WorkersBroadcaster for NonblockingBroadcaster {
     }
 }
 
-/// Extracts a list of unique leader addresses to which transactions will be sent.
+/// Extracts a list of unique leader addresses to which transactions will be
+/// sent.
 ///
-/// This function selects up to `send_fanout` addresses from the `leaders` list, ensuring that
-/// only unique addresses are included while maintaining their original order.
+/// This function selects up to `send_fanout` addresses from the `leaders` list,
+/// ensuring that only unique addresses are included while maintaining their
+/// original order.
 pub fn extract_send_leaders(leaders: &[SocketAddr], send_fanout: usize) -> Vec<SocketAddr> {
     let send_count = send_fanout.min(leaders.len());
     remove_duplicates(&leaders[..send_count])
