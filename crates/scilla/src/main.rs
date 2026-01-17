@@ -1,5 +1,5 @@
 use {
-    crate::{commands::NavigationTarget, error::ScillaResult, prompt::prompt_go_back},
+    crate::{commands::NavigationTarget, error::ScillaResult},
     commands::CommandFlow,
     config::ScillaConfig,
     console::style,
@@ -46,30 +46,12 @@ async fn main() -> ScillaResult {
                     ctx.get_nav_context_mut().set_root(command.section());
                 }
                 NavigationTarget::PreviousSection => {
-                    // Check if we're in a nested scenario ( depth>=2 )
-                    if ctx.get_nav_context_mut().is_nested() {
-                        // if we're the user should be able to choose if he wants to go to
-                        // MainSection or PreviousSection
-                        match prompt_go_back() {
-                            NavigationTarget::MainSection => {
-                                command = prompt_for_command()?;
-                                ctx.get_nav_context_mut().set_root(command.section());
-                            }
-                            NavigationTarget::PreviousSection => {
-                                ctx.get_nav_context_mut().pop();
-                                let previous = ctx
-                                    .get_nav_context_mut()
-                                    .current()
-                                    .expect("Navigation stack should have root");
-                                command = prompt_section(&previous)?;
-                            }
-                        }
-                    // If we aren't in a nested scenario, the only possibility
-                    // is to go to MainSection
-                    } else {
-                        command = prompt_for_command()?;
-                        ctx.get_nav_context_mut().set_root(command.section());
-                    }
+                    ctx.get_nav_context_mut().pop();
+                    let previous = ctx
+                        .get_nav_context_mut()
+                        .current()
+                        .expect("Navigation stack should have root");
+                    command = prompt_section(&previous)?;
                 }
             },
             CommandFlow::Exit => {
