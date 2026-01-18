@@ -1,13 +1,14 @@
-use std::fmt::{self, Display};
-
-use crate::{
-    commands::{Command, CommandFlow, program::ProgramCommand},
-    context::ScillaContext,
-    prompt::{
-        prompt_account_section, prompt_cluster_section, prompt_config_section, prompt_main_section,
-        prompt_program_section, prompt_stake_section, prompt_transaction_section,
-        prompt_vote_section,
+use {
+    crate::{
+        commands::{Command, CommandFlow, program::ProgramCommand},
+        context::ScillaContext,
+        prompt::{
+            prompt_account_section, prompt_cluster_section, prompt_config_section,
+            prompt_main_section, prompt_program_section, prompt_stake_section,
+            prompt_transaction_section, prompt_vote_section,
+        },
     },
+    std::fmt::{self, Display},
 };
 
 pub enum NavigationTarget {
@@ -120,6 +121,12 @@ pub struct NavContext {
     stack: Vec<NavigationSection>,
 }
 
+impl Default for NavContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NavContext {
     /// Creates an empty navigation context.
     pub fn new() -> Self {
@@ -134,7 +141,7 @@ impl NavContext {
     /// preserving the root section.
     pub fn pop_and_get_previous(&mut self) -> Option<NavigationSection> {
         self.stack.pop();
-        return self.current();
+        self.current()
     }
 
     /// Returns the current active section, or `None` if uninitialized.
@@ -142,16 +149,17 @@ impl NavContext {
         self.stack.last().copied()
     }
 
-    /// Resets the navigation stack and sets the provided section as the current root.
+    /// Resets the navigation stack and sets the provided section as the current
+    /// root.
     pub fn reset_navigation_to(&mut self, section: NavigationSection) {
         self.stack.clear();
         self.stack.push(section);
     }
 
-    /// Resets the navigation stack and sets the provided section as the current root.
+    /// Resets the navigation stack and sets the provided section as the current
+    /// root.
     pub fn reset_navigation_to_main(&mut self) {
-        self.stack.clear();
-        self.stack.push(NavigationSection::Main);
+        self.reset_navigation_to(NavigationSection::Main);
     }
 
     /// Pushes a new section onto the navigation stack.

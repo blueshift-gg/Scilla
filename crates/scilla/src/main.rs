@@ -45,7 +45,6 @@ async fn main() -> ScillaResult {
                     .get_nav_context()
                     .current()
                     .expect("navigation stack is empty; expected a root section to exist");
-                println!("current : {}", current);
                 res = current.prompt_and_process_command(&mut ctx).await?;
             }
             CommandFlow::NavigateTo(target) => match target {

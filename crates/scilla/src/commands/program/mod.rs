@@ -70,7 +70,7 @@ impl ProgramShared {
             ProgramShared::Build => todo!(),
             ProgramShared::Close => todo!(),
             ProgramShared::Extend => todo!(),
-            ProgramShared::GoBack => return CommandFlow::NavigateTo(prompt_go_back()),
+            ProgramShared::GoBack => CommandFlow::NavigateTo(prompt_go_back()),
         }
     }
 }
