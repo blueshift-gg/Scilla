@@ -1762,9 +1762,9 @@ dependencies = [
 
 [[package]]
 name = "inquire"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2628910d0114e9139056161d8644a2026be7b117f8498943f9437748b04c9e0a"
+checksum = "ae51d5da01ce7039024fbdec477767c102c454dbdb09d4e2a432ece705b1b25d"
 dependencies = [
  "bitflags 2.10.0",
  "crossterm",
@@ -3316,17 +3316,8 @@ dependencies = [
  "solana-clock",
  "solana-instruction",
  "solana-instruction-error",
-<<<<<<< HEAD
  "solana-pubkey 4.0.0",
  "solana-sdk-ids",
-=======
- "solana-pubkey 3.0.0",
-<<<<<<< HEAD
- "solana-sdk-ids 3.1.0",
->>>>>>> b8c0ad1 (wip)
-=======
- "solana-sdk-ids",
->>>>>>> e4cdd52 (rebase)
  "solana-slot-hashes",
 ]
 
@@ -6186,9 +6177,9 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd8f3f50b848df28f887acb68e41201b5aea6bc8a8dacc00fb40635ff9a72fea"
+checksum = "94f63c051f4fe3c1509da62131a678643c5b6fbdc9273b2b79d4378ebda003d2"
 
 [[package]]
 name = "zstd"
