@@ -1,6 +1,6 @@
 use {
     crate::{
-        commands::{CommandFlow, NavigationTarget},
+        commands::{Command, CommandFlow, NavigationTarget, navigation::NavigationSection},
         context::ScillaContext,
         misc::helpers::{bincode_deserialize, decode_base58, decode_base64},
         prompt::{prompt_input_data, prompt_select_data},
@@ -48,32 +48,26 @@ impl fmt::Display for TransactionCommand {
     }
 }
 
-impl TransactionCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
+impl Command for TransactionCommand {
+    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+        ctx.get_nav_context_mut()
+            .checked_push(NavigationSection::Transaction);
         match self {
             TransactionCommand::CheckConfirmation => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
-                show_spinner(
-                    self.spinner_msg(),
-                    process_check_confirmation(ctx, &signature),
-                )
-                .await;
+                show_spinner(self.spinner_msg(), check_confirmation(ctx, &signature)).await;
             }
             TransactionCommand::FetchStatus => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
                 show_spinner(
                     self.spinner_msg(),
-                    process_fetch_transaction_status(ctx, &signature),
+                    fetch_transaction_status(ctx, &signature),
                 )
                 .await;
             }
             TransactionCommand::FetchTransaction => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
-                show_spinner(
-                    self.spinner_msg(),
-                    process_fetch_transaction(ctx, &signature),
-                )
-                .await;
+                show_spinner(self.spinner_msg(), fetch_transaction(ctx, &signature)).await;
             }
             TransactionCommand::SendTransaction => {
                 println!(
@@ -92,23 +86,20 @@ impl TransactionCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_send_transaction(ctx, encoding, &encoded_tx),
+                    send_transaction(ctx, encoding, &encoded_tx),
                 )
                 .await;
             }
             TransactionCommand::GoBack => {
-                return CommandFlow::NavigateTo(NavigationTarget::MainSection);
+                return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
             }
         }
 
-        CommandFlow::Processed
+        Ok(CommandFlow::Processed)
     }
 }
 
-async fn process_check_confirmation(
-    ctx: &ScillaContext,
-    signature: &Signature,
-) -> anyhow::Result<()> {
+async fn check_confirmation(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
     let confirmed = ctx.rpc().confirm_transaction(signature).await?;
 
     let status_styled = if confirmed {
@@ -137,7 +128,7 @@ async fn process_check_confirmation(
     Ok(())
 }
 
-async fn process_fetch_transaction_status(
+async fn fetch_transaction_status(
     ctx: &ScillaContext,
     signature: &Signature,
 ) -> anyhow::Result<()> {
@@ -207,10 +198,7 @@ async fn process_fetch_transaction_status(
     Ok(())
 }
 
-async fn process_fetch_transaction(
-    ctx: &ScillaContext,
-    signature: &Signature,
-) -> anyhow::Result<()> {
+async fn fetch_transaction(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
     let tx = ctx
         .rpc()
         .get_transaction_with_config(
@@ -344,7 +332,7 @@ async fn process_fetch_transaction(
     Ok(())
 }
 
-async fn process_send_transaction(
+async fn send_transaction(
     ctx: &ScillaContext,
     encoding: UiTransactionEncoding,
     encoded_tx: &str,

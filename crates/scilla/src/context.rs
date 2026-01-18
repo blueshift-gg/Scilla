@@ -1,5 +1,5 @@
 use {
-    crate::{config::ScillaConfig, misc::navigation::NavContext},
+    crate::{commands::navigation::NavContext, config::ScillaConfig},
     anyhow::anyhow,
     solana_commitment_config::CommitmentConfig,
     solana_keypair::{EncodableKey, Keypair, Signer},
@@ -71,6 +71,10 @@ impl ScillaContext {
     pub fn get_nav_context_mut(&mut self) -> &mut NavContext {
         &mut self.navigation_context
     }
+
+    pub fn get_nav_context(&self) -> &NavContext {
+        &self.navigation_context
+    }
 }
 
 impl TryFrom<ScillaConfig> for ScillaContext {
@@ -87,7 +91,7 @@ impl TryFrom<ScillaConfig> for ScillaContext {
             keypair,
             pubkey,
             keypair_path: config.keypair_path,
-            navigation_context: NavContext::default(),
+            navigation_context: NavContext::new(),
         })
     }
 }

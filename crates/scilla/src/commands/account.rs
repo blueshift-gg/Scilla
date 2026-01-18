@@ -1,6 +1,9 @@
 use {
     crate::{
-        commands::{CommandFlow, NavigationTarget},
+        commands::{
+            Command, CommandFlow,
+            navigation::{NavigationSection, NavigationTarget},
+        },
         context::ScillaContext,
         misc::helpers::{bincode_deserialize, build_and_send_tx, lamports_to_sol, sol_to_lamports},
         prompt::prompt_input_data,
@@ -61,8 +64,10 @@ impl fmt::Display for AccountCommand {
     }
 }
 
-impl AccountCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
+impl Command for AccountCommand {
+    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+        ctx.get_nav_context_mut()
+            .checked_push(NavigationSection::Account);
         match self {
             AccountCommand::FetchAccount => {
                 let pubkey: Pubkey = prompt_input_data("Enter Pubkey:");
@@ -93,11 +98,11 @@ impl AccountCommand {
                 show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
             }
             AccountCommand::GoBack => {
-                return CommandFlow::NavigateTo(NavigationTarget::MainSection);
+                return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
             }
         }
 
-        CommandFlow::Processed
+        Ok(CommandFlow::Processed)
     }
 }
 

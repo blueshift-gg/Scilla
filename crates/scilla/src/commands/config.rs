@@ -1,11 +1,13 @@
 use {
     crate::{
-        commands::{CommandFlow, NavigationTarget},
+        commands::{
+            Command, CommandFlow,
+            navigation::{NavigationSection, NavigationTarget},
+        },
         config::{ScillaConfig, scilla_config_path},
         context::ScillaContext,
         misc::helpers::short_pubkey,
         prompt::{prompt_input_data, prompt_keypair_path, prompt_network_rpc_url},
-        ui::print_error,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
@@ -98,19 +100,19 @@ fn get_commitment_levels() -> Vec<UICommitmentOptions> {
     ]
 }
 
-impl ConfigCommand {
-    pub fn process_command(&self, ctx: &mut ScillaContext) -> CommandFlow {
-        let res = match self {
-            ConfigCommand::Show => show_config(ctx),
-            ConfigCommand::Edit => edit_config(ctx),
-            ConfigCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainSection),
+impl Command for ConfigCommand {
+    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+        ctx.get_nav_context_mut()
+            .checked_push(NavigationSection::ScillaConfig);
+        match self {
+            ConfigCommand::Show => show_config(ctx)?,
+            ConfigCommand::Edit => edit_config(ctx)?,
+            ConfigCommand::GoBack => {
+                return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
+            }
         };
 
-        if let Err(e) = res {
-            print_error(e.to_string())
-        }
-
-        CommandFlow::Processed
+        Ok(CommandFlow::Processed)
     }
 }
 

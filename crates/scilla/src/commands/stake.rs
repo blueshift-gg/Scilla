@@ -1,6 +1,9 @@
 use {
     crate::{
-        commands::{CommandFlow, NavigationTarget},
+        commands::{
+            Command, CommandFlow,
+            navigation::{NavigationSection, NavigationTarget},
+        },
         constants::{
             ACTIVE_STAKE_EPOCH_BOUND, DEFAULT_EPOCH_LIMIT, LAMPORTS_PER_SOL,
             STAKE_HISTORY_SYSVAR_ADDR,
@@ -82,8 +85,10 @@ impl fmt::Display for StakeCommand {
     }
 }
 
-impl StakeCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
+impl Command for StakeCommand {
+    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+        ctx.get_nav_context_mut()
+            .checked_push(NavigationSection::Stake);
         match self {
             StakeCommand::Create => {
                 let stake_account_keypair_path: PathBuf =
@@ -111,7 +116,7 @@ impl StakeCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_create_stake_account(
+                    create_stake_account(
                         ctx,
                         stake_account_keypair_path,
                         amount_sol,
@@ -145,12 +150,12 @@ impl StakeCommand {
 
                 if !prompt_confirmation("Are you sure you want to deactivate this stake?") {
                     println!("{}", style("Deactivation cancelled.").yellow());
-                    return CommandFlow::Processed;
+                    return Ok(CommandFlow::Processed);
                 }
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_deactivate_stake_account(ctx, &stake_pubkey),
+                    deactivate_stake_account(ctx, &stake_pubkey),
                 )
                 .await;
             }
@@ -165,12 +170,12 @@ impl StakeCommand {
                     amount.value()
                 )) {
                     println!("{}", style("Withdrawal cancelled.").yellow());
-                    return CommandFlow::Processed;
+                    return Ok(CommandFlow::Processed);
                 }
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_withdraw_stake(ctx, &stake_pubkey, &recipient, amount.value()),
+                    withdraw_stake(ctx, &stake_pubkey, &recipient, amount.value()),
                 )
                 .await;
             }
@@ -184,7 +189,7 @@ impl StakeCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_merge_stake(
+                    merge_stake(
                         ctx,
                         &destination_stake_account_pubkey,
                         &source_stake_account_pubkey,
@@ -204,7 +209,7 @@ impl StakeCommand {
 
                 show_spinner(
                     self.spinner_msg(),
-                    process_split_stake(
+                    split_stake(
                         ctx,
                         &stake_account_pubkey,
                         &split_stake_account_pubkey,
@@ -223,17 +228,19 @@ impl StakeCommand {
                 .await;
             }
             StakeCommand::History => {
-                show_spinner(self.spinner_msg(), process_stake_history(ctx)).await;
+                show_spinner(self.spinner_msg(), stake_history(ctx)).await;
             }
 
-            StakeCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainSection),
+            StakeCommand::GoBack => {
+                return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
+            }
         }
 
-        CommandFlow::Processed
+        Ok(CommandFlow::Processed)
     }
 }
 
-async fn process_create_stake_account(
+async fn create_stake_account(
     ctx: &ScillaContext,
     stake_account_keypair_path: PathBuf,
     amount_sol: SolAmount,
@@ -700,7 +707,7 @@ async fn delegate_stake_account(
     Ok(())
 }
 
-async fn process_deactivate_stake_account(
+async fn deactivate_stake_account(
     ctx: &ScillaContext,
     stake_pubkey: &Pubkey,
 ) -> anyhow::Result<()> {
@@ -752,7 +759,7 @@ async fn process_deactivate_stake_account(
     Ok(())
 }
 
-async fn process_withdraw_stake(
+async fn withdraw_stake(
     ctx: &ScillaContext,
     stake_pubkey: &Pubkey,
     recipient: &Pubkey,
@@ -843,7 +850,7 @@ async fn process_withdraw_stake(
     Ok(())
 }
 
-async fn process_merge_stake(
+async fn merge_stake(
     ctx: &ScillaContext,
     destination_stake_account_pubkey: &Pubkey,
     source_stake_account_pubkey: &Pubkey,
@@ -961,7 +968,7 @@ async fn process_merge_stake(
     Ok(())
 }
 
-async fn process_split_stake(
+async fn split_stake(
     ctx: &ScillaContext,
     stake_account_pubkey: &Pubkey,
     split_stake_account_pubkey: &Pubkey,
@@ -1009,7 +1016,7 @@ async fn process_split_stake(
     Ok(())
 }
 
-async fn process_stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
+async fn stake_history(ctx: &ScillaContext) -> anyhow::Result<()> {
     let stake_history_sysvar = Pubkey::from_str_const(STAKE_HISTORY_SYSVAR_ADDR);
 
     let account = ctx.rpc().get_account(&stake_history_sysvar).await?;

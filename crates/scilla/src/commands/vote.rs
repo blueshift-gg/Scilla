@@ -1,7 +1,10 @@
 use {
     crate::{
         ScillaContext,
-        commands::{CommandFlow, NavigationTarget},
+        commands::{
+            Command, CommandFlow,
+            navigation::{NavigationSection, NavigationTarget},
+        },
         misc::helpers::{
             Commission, SolAmount, build_and_send_tx, fetch_account_with_epoch, lamports_to_sol,
             read_keypair_from_path,
@@ -60,8 +63,10 @@ impl fmt::Display for VoteCommand {
     }
 }
 
-impl VoteCommand {
-    pub async fn process_command(&self, ctx: &ScillaContext) -> CommandFlow {
+impl Command for VoteCommand {
+    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+        ctx.get_nav_context_mut()
+            .checked_push(NavigationSection::Vote);
         match self {
             VoteCommand::CreateVoteAccount => {
                 let vote_account_keypair_path =
@@ -139,7 +144,7 @@ impl VoteCommand {
 
                 if !prompt_confirmation("Are you sure you want to close this vote account?") {
                     println!("{}", style("Close vote account cancelled.").yellow());
-                    return CommandFlow::Processed;
+                    return Ok(CommandFlow::Processed);
                 }
 
                 show_spinner(
@@ -153,10 +158,12 @@ impl VoteCommand {
                 )
                 .await;
             }
-            VoteCommand::GoBack => return CommandFlow::NavigateTo(NavigationTarget::MainSection),
+            VoteCommand::GoBack => {
+                return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
+            }
         }
 
-        CommandFlow::Processed
+        Ok(CommandFlow::Processed)
     }
 }
 

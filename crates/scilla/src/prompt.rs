@@ -1,9 +1,16 @@
 use {
     crate::{
         commands::{
-            Command, CommandGroup, NavigationTarget, account::AccountCommand,
-            cluster::ClusterCommand, config::ConfigCommand, stake::StakeCommand,
-            transaction::TransactionCommand, vote::VoteCommand,
+            Command,
+            account::AccountCommand,
+            cluster::ClusterCommand,
+            config::ConfigCommand,
+            main_command::MainCommand,
+            navigation::NavigationTarget,
+            program::{ProgramCommand, ProgramShared},
+            stake::StakeCommand,
+            transaction::TransactionCommand,
+            vote::VoteCommand,
         },
         constants::{DEVNET_RPC, MAINNET_RPC, TESTNET_RPC},
         context::ScillaContext,
@@ -13,75 +20,26 @@ use {
     inquire::{Confirm, InquireError, Select, Text},
     std::{fmt::Display, path::PathBuf, process::exit, str::FromStr},
 };
-pub fn prompt_for_command() -> anyhow::Result<Command> {
-    let top_level = Select::new(
+pub fn prompt_main_section() -> anyhow::Result<impl Command> {
+    let command = Select::new(
         "Choose a command group:",
         vec![
-            CommandGroup::Account,
-            CommandGroup::Cluster,
-            CommandGroup::Stake,
-            CommandGroup::Vote,
-            CommandGroup::Transaction,
-            CommandGroup::ScillaConfig,
-            CommandGroup::Exit,
+            MainCommand::Account,
+            MainCommand::Cluster,
+            MainCommand::Stake,
+            MainCommand::Program,
+            MainCommand::Vote,
+            MainCommand::Transaction,
+            MainCommand::ScillaConfig,
+            MainCommand::Exit,
         ],
     )
     .prompt()?;
-
-    let command = match top_level {
-        CommandGroup::Cluster => Command::Cluster(prompt_cluster()?),
-        CommandGroup::Stake => Command::Stake(prompt_stake()?),
-        CommandGroup::Account => Command::Account(prompt_account()?),
-        CommandGroup::Vote => Command::Vote(prompt_vote()?),
-        CommandGroup::ScillaConfig => Command::ScillaConfig(prompt_config()?),
-        CommandGroup::Transaction => Command::Transaction(prompt_transaction()?),
-        CommandGroup::Exit => Command::Exit,
-    };
 
     Ok(command)
 }
 
-fn prompt_cluster() -> anyhow::Result<ClusterCommand> {
-    let choice = Select::new(
-        "Cluster Command:",
-        vec![
-            ClusterCommand::EpochInfo,
-            ClusterCommand::CurrentSlot,
-            ClusterCommand::BlockHeight,
-            ClusterCommand::BlockTime,
-            ClusterCommand::Validators,
-            ClusterCommand::ClusterVersion,
-            ClusterCommand::SupplyInfo,
-            ClusterCommand::Inflation,
-            ClusterCommand::GoBack,
-        ],
-    )
-    .prompt()?;
-
-    Ok(choice)
-}
-
-fn prompt_stake() -> anyhow::Result<StakeCommand> {
-    let choice = Select::new(
-        "Stake Command:",
-        vec![
-            StakeCommand::Create,
-            StakeCommand::Delegate,
-            StakeCommand::Deactivate,
-            StakeCommand::Withdraw,
-            StakeCommand::Merge,
-            StakeCommand::Split,
-            StakeCommand::Show,
-            StakeCommand::History,
-            StakeCommand::GoBack,
-        ],
-    )
-    .prompt()?;
-
-    Ok(choice)
-}
-
-fn prompt_account() -> anyhow::Result<AccountCommand> {
+pub fn prompt_account_section() -> anyhow::Result<AccountCommand> {
     let choice = Select::new(
         "Account Command:",
         vec![
@@ -101,7 +59,80 @@ fn prompt_account() -> anyhow::Result<AccountCommand> {
     Ok(choice)
 }
 
-fn prompt_vote() -> anyhow::Result<VoteCommand> {
+pub fn prompt_cluster_section() -> anyhow::Result<ClusterCommand> {
+    let choice = Select::new(
+        "Cluster Command:",
+        vec![
+            ClusterCommand::EpochInfo,
+            ClusterCommand::CurrentSlot,
+            ClusterCommand::BlockHeight,
+            ClusterCommand::BlockTime,
+            ClusterCommand::Validators,
+            ClusterCommand::ClusterVersion,
+            ClusterCommand::SupplyInfo,
+            ClusterCommand::Inflation,
+            ClusterCommand::GoBack,
+        ],
+    )
+    .prompt()?;
+
+    Ok(choice)
+}
+
+pub fn prompt_stake_section() -> anyhow::Result<StakeCommand> {
+    let choice = Select::new(
+        "Stake Command:",
+        vec![
+            StakeCommand::Create,
+            StakeCommand::Delegate,
+            StakeCommand::Deactivate,
+            StakeCommand::Withdraw,
+            StakeCommand::Merge,
+            StakeCommand::Split,
+            StakeCommand::Show,
+            StakeCommand::History,
+            StakeCommand::GoBack,
+        ],
+    )
+    .prompt()?;
+
+    Ok(choice)
+}
+
+pub fn prompt_program_section() -> anyhow::Result<ProgramCommand> {
+    let choice = Select::new(
+        "Program Command:",
+        vec![
+            ProgramCommand::ProgramLegacy,
+            ProgramCommand::ProgramV4,
+            ProgramCommand::GoBack,
+        ],
+    )
+    .with_page_size(10)
+    .prompt()?;
+
+    Ok(choice)
+}
+
+pub fn prompt_program_section_shared() -> anyhow::Result<ProgramShared> {
+    let choice = Select::new(
+        "Program Action:",
+        vec![
+            ProgramShared::Deploy,
+            ProgramShared::Upgrade,
+            ProgramShared::Build,
+            ProgramShared::Close,
+            ProgramShared::Extend,
+            ProgramShared::GoBack,
+        ],
+    )
+    .with_page_size(10)
+    .prompt()?;
+
+    Ok(choice)
+}
+
+pub fn prompt_vote_section() -> anyhow::Result<VoteCommand> {
     let choice = Select::new(
         "Vote Command:",
         vec![
@@ -118,7 +149,7 @@ fn prompt_vote() -> anyhow::Result<VoteCommand> {
     Ok(choice)
 }
 
-fn prompt_transaction() -> anyhow::Result<TransactionCommand> {
+pub fn prompt_transaction_section() -> anyhow::Result<TransactionCommand> {
     let choice = Select::new(
         "Transaction Command:",
         vec![
@@ -134,7 +165,7 @@ fn prompt_transaction() -> anyhow::Result<TransactionCommand> {
     Ok(choice)
 }
 
-fn prompt_config() -> anyhow::Result<ConfigCommand> {
+pub fn prompt_config_section() -> anyhow::Result<ConfigCommand> {
     let choice = Select::new(
         "ScillaConfig Command:",
         vec![
@@ -271,18 +302,6 @@ impl Network {
 pub fn prompt_network_rpc_url() -> anyhow::Result<String> {
     let network = Select::new("Select network:", Network::all()).prompt()?;
     Ok(network.rpc_url().to_string())
-}
-
-pub fn prompt_section(section: &CommandGroup) -> anyhow::Result<Command> {
-    match section {
-        CommandGroup::Cluster => Ok(Command::Cluster(prompt_cluster()?)),
-        CommandGroup::Stake => Ok(Command::Stake(prompt_stake()?)),
-        CommandGroup::Account => Ok(Command::Account(prompt_account()?)),
-        CommandGroup::Vote => Ok(Command::Vote(prompt_vote()?)),
-        CommandGroup::Transaction => Ok(Command::Transaction(prompt_transaction()?)),
-        CommandGroup::ScillaConfig => Ok(Command::ScillaConfig(prompt_config()?)),
-        CommandGroup::Exit => Ok(Command::Exit),
-    }
 }
 
 pub fn prompt_go_back() -> NavigationTarget {

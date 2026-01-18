@@ -1,10 +1,16 @@
 use {
-    crate::{commands::NavigationTarget, error::ScillaResult},
+    crate::{
+        commands::{
+            Command,
+            navigation::{NavigationSection, NavigationTarget},
+        },
+        error::ScillaResult,
+    },
     commands::CommandFlow,
     config::ScillaConfig,
     console::style,
     context::ScillaContext,
-    prompt::{prompt_for_command, prompt_section},
+    prompt::prompt_main_section,
 };
 
 pub mod commands;
@@ -28,30 +34,41 @@ async fn main() -> ScillaResult {
     let config = ScillaConfig::load()?;
     let mut ctx = ScillaContext::try_from(config)?;
 
-    let mut command = prompt_for_command()?;
-    ctx.get_nav_context_mut().set_root(command.section());
+    let command = prompt_main_section()?;
+
+    let mut res = command.process_command(&mut ctx).await?;
 
     loop {
-        match command.process_command(&mut ctx).await {
+        match res {
             CommandFlow::Processed => {
                 let current = ctx
-                    .get_nav_context_mut()
+                    .get_nav_context()
                     .current()
-                    .expect("Navigation stack should have root");
-                command = prompt_section(&current)?;
+                    .expect("navigation stack is empty; expected a root section to exist");
+                println!("current : {}", current);
+                res = current.prompt_and_process_command(&mut ctx).await?;
             }
             CommandFlow::NavigateTo(target) => match target {
                 NavigationTarget::MainSection => {
-                    command = prompt_for_command()?;
-                    ctx.get_nav_context_mut().set_root(command.section());
+                    ctx.get_nav_context_mut().reset_navigation_to_main();
+                    res = NavigationSection::Main
+                        .prompt_and_process_command(&mut ctx)
+                        .await?;
                 }
                 NavigationTarget::PreviousSection => {
-                    ctx.get_nav_context_mut().pop();
                     let previous = ctx
                         .get_nav_context_mut()
-                        .current()
-                        .expect("Navigation stack should have root");
-                    command = prompt_section(&previous)?;
+                        .pop_and_get_previous()
+                        .expect("navigation stack is empty; expected a root section to exist");
+
+                    match previous {
+                        NavigationSection::Main => {
+                            res = NavigationSection::Main
+                                .prompt_and_process_command(&mut ctx)
+                                .await?;
+                        }
+                        _ => res = previous.prompt_and_process_command(&mut ctx).await?,
+                    }
                 }
             },
             CommandFlow::Exit => {
