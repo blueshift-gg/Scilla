@@ -9,7 +9,8 @@ use {
     solana_keypair::{EncodableKey, Keypair, Signature, Signer},
     solana_message::Message,
     solana_pubkey::Pubkey,
-    solana_transaction::Transaction,
+    solana_transaction::{Transaction, versioned::VersionedTransaction},
+    solana_transaction_status::UiTransactionEncoding,
     std::{path::Path, str::FromStr},
     tokio::try_join,
 };
@@ -204,6 +205,22 @@ pub fn short_pubkey(pk: &Pubkey) -> String {
     let prefix = &s[..4];
     let suffix = &s[s.len() - 3..];
     format!("{prefix}...{suffix}")
+}
+
+pub fn encode_and_deserialize_transaction(
+    encoding: UiTransactionEncoding,
+    encoded_tx: &str,
+) -> anyhow::Result<VersionedTransaction> {
+    let tx_bytes = match encoding {
+        UiTransactionEncoding::Base64 => decode_base64(encoded_tx)?,
+        UiTransactionEncoding::Base58 => decode_base58(encoded_tx)?,
+        _ => unreachable!("The available encoding options are Base64 and Base58"),
+    };
+
+    let tx: VersionedTransaction =
+        bincode_deserialize(&tx_bytes, "encoded transaction to VersionedTransaction")?;
+
+    Ok(tx)
 }
 
 #[cfg(test)]

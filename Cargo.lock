@@ -2889,6 +2889,7 @@ dependencies = [
  "inquire",
  "serde",
  "solana-account",
+ "solana-account-decoder",
  "solana-clock",
  "solana-commitment-config",
  "solana-epoch-info",
