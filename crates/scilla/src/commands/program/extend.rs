@@ -18,7 +18,7 @@ use {
     std::{fs, path::PathBuf},
 };
 
-pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
+pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow {
     let program_address: Pubkey = prompt_input_data("Enter Program Address: ");
     let program_path: PathBuf = prompt_input_data("Enter Program File Path: ");
 
@@ -29,7 +29,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
                 "{}",
                 style(format!("Error: Failed to read program file: {}", e)).red()
             );
-            return CommandFlow::Process(());
+            return CommandFlow::Processed;
         }
     };
 
@@ -38,7 +38,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
             Ok(info) => info,
             Err(e) => {
                 println!("{}", style(format!("Error: {:#}", e)).red());
-                return CommandFlow::Process(());
+                return CommandFlow::Processed;
             }
         };
 
@@ -54,7 +54,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
             ))
             .red()
         );
-        return CommandFlow::Process(());
+        return CommandFlow::Processed;
     };
 
     let (additional_rent, new_size) =
@@ -64,7 +64,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
             Ok(cost) => cost,
             Err(e) => {
                 println!("{}", style(format!("Error: {:#}", e)).red());
-                return CommandFlow::Process(());
+                return CommandFlow::Processed;
             }
         };
 
@@ -123,12 +123,12 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
 
     if let Err(e) = check_minimum_balance(ctx, ctx.pubkey(), additional_rent).await {
         println!("{}", style(format!("Error: {:#}", e)).red());
-        return CommandFlow::Process(());
+        return CommandFlow::Processed;
     }
 
     if !prompt_confirmation("Do you want to proceed with extending the program? (y/n)") {
         println!("{}", style("Program extension cancelled.").yellow());
-        return CommandFlow::Process(());
+        return CommandFlow::Processed;
     }
 
     show_spinner(
@@ -137,7 +137,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow<()> {
     )
     .await;
 
-    CommandFlow::Process(())
+    CommandFlow::Processed
 }
 
 async fn fetch_current_program_info(
