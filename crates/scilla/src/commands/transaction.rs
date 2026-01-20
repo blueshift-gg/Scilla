@@ -398,7 +398,17 @@ async fn simulate_transaction(
                 )
                 .await?
         }
-        false => ctx.rpc().simulate_transaction(&tx).await?,
+        false => {
+            ctx.rpc()
+                .simulate_transaction_with_config(
+                    &tx,
+                    RpcSimulateTransactionConfig {
+                        commitment: Some(ctx.rpc().commitment()),
+                        ..Default::default()
+                    },
+                )
+                .await?
+        }
     };
     let value = response.value;
 
