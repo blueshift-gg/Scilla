@@ -3,7 +3,7 @@ use {
         commands::{Command, CommandFlow, NavigationTarget, navigation::NavigationSection},
         context::ScillaContext,
         misc::helpers::decode_and_deserialize_transaction,
-        prompt::{prompt_encoding_options, prompt_input_data},
+        prompt::{prompt_confirmation, prompt_encoding_options, prompt_input_data},
         ui::show_spinner,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
@@ -100,13 +100,17 @@ impl Command for TransactionCommand {
                         .dim()
                 );
 
+                let relaxed = prompt_confirmation(
+                    "Use relaxed mode (skip signature verification, refresh blockhash)? (y/n):",
+                );
+
                 let encoding = prompt_encoding_options();
 
                 let encoded_tx: String = prompt_input_data("Enter encoded transaction:");
 
                 show_spinner(
                     self.spinner_msg(),
-                    simulate_transaction(ctx, encoding, &encoded_tx),
+                    simulate_transaction(ctx, encoding, &encoded_tx, relaxed),
                 )
                 .await;
             }
@@ -374,24 +378,28 @@ async fn simulate_transaction(
     ctx: &ScillaContext,
     encoding: UiTransactionEncoding,
     encoded_tx: &str,
+    relaxed: bool,
 ) -> anyhow::Result<()> {
     let tx = decode_and_deserialize_transaction(encoding, encoded_tx)?;
 
-    let response = ctx
-        .rpc()
-        .simulate_transaction_with_config(
-            &tx,
-            RpcSimulateTransactionConfig {
-                // Be able to simulate with older transactions
-                // Guarantee a flexible simulation environment
-                replace_recent_blockhash: true,
-                sig_verify: false,
-                commitment: Some(ctx.rpc().commitment()),
-                ..Default::default()
-            },
-        )
-        .await?;
-
+    let response = match relaxed {
+        true => {
+            ctx.rpc()
+                .simulate_transaction_with_config(
+                    &tx,
+                    RpcSimulateTransactionConfig {
+                        // Be able to simulate with older transactions
+                        // Guarantee a flexible simulation environment
+                        replace_recent_blockhash: true,
+                        sig_verify: false,
+                        commitment: Some(ctx.rpc().commitment()),
+                        ..Default::default()
+                    },
+                )
+                .await?
+        }
+        false => ctx.rpc().simulate_transaction(&tx).await?,
+    };
     let value = response.value;
 
     println!("\n{}", style("SIMULATION RESULT").green().bold());
