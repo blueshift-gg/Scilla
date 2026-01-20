@@ -9,7 +9,7 @@ use {
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     solana_account_decoder::UiAccount,
-    solana_rpc_client_api::config::RpcTransactionConfig,
+    solana_rpc_client_api::config::{RpcSimulateTransactionConfig, RpcTransactionConfig},
     solana_signature::Signature,
     solana_transaction_status::{
         EncodedTransaction, UiInnerInstructions, UiMessage, UiTransactionEncoding,
@@ -377,7 +377,20 @@ async fn simulate_transaction(
 ) -> anyhow::Result<()> {
     let tx = decode_and_deserialize_transaction(encoding, encoded_tx)?;
 
-    let response = ctx.rpc().simulate_transaction(&tx).await?;
+    let response = ctx
+        .rpc()
+        .simulate_transaction_with_config(
+            &tx,
+            RpcSimulateTransactionConfig {
+                // Be able to simulate with older transactions
+                // Guarantee a flexible simulation environment
+                replace_recent_blockhash: true,
+                sig_verify: false,
+                commitment: Some(ctx.rpc().commitment()),
+                ..Default::default()
+            },
+        )
+        .await?;
 
     let value = response.value;
 
