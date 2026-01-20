@@ -18,6 +18,7 @@ use {
     },
     console::style,
     inquire::{Confirm, InquireError, Select, Text},
+    solana_transaction_status::UiTransactionEncoding,
     std::{fmt::Display, path::PathBuf, process::exit, str::FromStr},
 };
 pub fn prompt_main_section() -> anyhow::Result<impl Command> {
@@ -317,4 +318,17 @@ pub fn prompt_go_back() -> NavigationTarget {
         "Previous Section" => NavigationTarget::PreviousSection,
         _ => unreachable!(),
     }
+}
+
+pub fn prompt_encoding_options() -> UiTransactionEncoding {
+    prompt_select_data(
+        "Select encoding format:",
+        vec![
+            UiTransactionEncoding::Base64,
+            UiTransactionEncoding::Base58,
+            UiTransactionEncoding::Binary,
+            UiTransactionEncoding::Json,
+            UiTransactionEncoding::JsonParsed,
+        ],
+    )
 }

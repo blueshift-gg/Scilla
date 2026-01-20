@@ -2,8 +2,8 @@ use {
     crate::{
         commands::{Command, CommandFlow, NavigationTarget, navigation::NavigationSection},
         context::ScillaContext,
-        misc::helpers::encode_and_deserialize_transaction,
-        prompt::{prompt_input_data, prompt_select_data},
+        misc::helpers::decode_and_deserialize_transaction,
+        prompt::{prompt_encoding_options, prompt_input_data},
         ui::show_spinner,
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
@@ -82,10 +82,7 @@ impl Command for TransactionCommand {
                         .dim()
                 );
 
-                let encoding = prompt_select_data(
-                    "Select encoding format:",
-                    vec![UiTransactionEncoding::Base64, UiTransactionEncoding::Base58],
-                );
+                let encoding = prompt_encoding_options();
 
                 let encoded_tx: String = prompt_input_data("Enter encoded transaction:");
 
@@ -103,10 +100,7 @@ impl Command for TransactionCommand {
                         .dim()
                 );
 
-                let encoding = prompt_select_data(
-                    "Select encoding format:",
-                    vec![UiTransactionEncoding::Base64, UiTransactionEncoding::Base58],
-                );
+                let encoding = prompt_encoding_options();
 
                 let encoded_tx: String = prompt_input_data("Enter encoded transaction:");
 
@@ -363,7 +357,7 @@ async fn send_transaction(
     encoding: UiTransactionEncoding,
     encoded_tx: &str,
 ) -> anyhow::Result<()> {
-    let tx = encode_and_deserialize_transaction(encoding, encoded_tx)?;
+    let tx = decode_and_deserialize_transaction(encoding, encoded_tx)?;
 
     let signature = ctx.rpc().send_transaction(&tx).await?;
 
@@ -381,7 +375,7 @@ async fn simulate_transaction(
     encoding: UiTransactionEncoding,
     encoded_tx: &str,
 ) -> anyhow::Result<()> {
-    let tx = encode_and_deserialize_transaction(encoding, encoded_tx)?;
+    let tx = decode_and_deserialize_transaction(encoding, encoded_tx)?;
 
     let response = ctx.rpc().simulate_transaction(&tx).await?;
 
