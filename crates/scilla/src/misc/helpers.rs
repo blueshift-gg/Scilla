@@ -9,7 +9,11 @@ use {
     solana_keypair::{EncodableKey, Keypair, Signature, Signer},
     solana_message::Message,
     solana_pubkey::Pubkey,
-    solana_transaction::Transaction,
+    solana_transaction::{Transaction, versioned::VersionedTransaction},
+    solana_transaction_status::{
+        EncodedTransaction, EncodedTransactionWithStatusMeta, TransactionBinaryEncoding,
+        UiTransactionEncoding,
+    },
     std::{path::Path, str::FromStr},
     tokio::try_join,
 };
@@ -172,13 +176,8 @@ where
 }
 
 pub fn decode_base64(encoded: &str) -> anyhow::Result<Vec<u8>> {
-    let trimmed = encoded.trim();
-    if trimmed.is_empty() {
-        bail!("Encoded data cannot be empty");
-    }
-
     base64::engine::general_purpose::STANDARD
-        .decode(trimmed)
+        .decode(encoded)
         .map_err(|e| {
             anyhow::anyhow!(
                 "Failed to decode Base64: {e}. Please ensure the data is valid Base64 encoded."
@@ -187,12 +186,7 @@ pub fn decode_base64(encoded: &str) -> anyhow::Result<Vec<u8>> {
 }
 
 pub fn decode_base58(encoded: &str) -> anyhow::Result<Vec<u8>> {
-    let trimmed = encoded.trim();
-    if trimmed.is_empty() {
-        bail!("Encoded data cannot be empty");
-    }
-
-    bs58::decode(trimmed).into_vec().map_err(|e| {
+    bs58::decode(encoded).into_vec().map_err(|e| {
         anyhow::anyhow!(
             "Failed to decode Base58: {e}. Please ensure the data is valid Base58 encoded."
         )
@@ -206,12 +200,78 @@ pub fn short_pubkey(pk: &Pubkey) -> String {
     format!("{prefix}...{suffix}")
 }
 
+pub fn decode_and_deserialize_transaction(
+    encoding: UiTransactionEncoding,
+    encoded_tx: &str,
+) -> anyhow::Result<VersionedTransaction> {
+    let trimmed = encoded_tx.trim();
+
+    if trimmed.is_empty() {
+        bail!("Encoded transaction cannot be empty");
+    }
+
+    let tx_bytes = match encoding {
+        UiTransactionEncoding::Base64 => decode_base64(trimmed)?,
+        UiTransactionEncoding::Base58 => decode_base58(trimmed)?,
+        UiTransactionEncoding::Json | UiTransactionEncoding::JsonParsed => {
+            decode_rpc_json_transaction(trimmed)?
+        }
+        UiTransactionEncoding::Binary => {
+            let Some(binary_encoding) = encoding.into_binary_encoding() else {
+                bail!("Unsupported binary encoding");
+            };
+            decode_binary(trimmed, binary_encoding)?
+        }
+    };
+
+    bincode_deserialize(&tx_bytes, "encoded transaction to VersionedTransaction")
+}
+
+fn decode_binary(blob: &str, encoding: TransactionBinaryEncoding) -> anyhow::Result<Vec<u8>> {
+    match encoding {
+        TransactionBinaryEncoding::Base64 => decode_base64(blob),
+        TransactionBinaryEncoding::Base58 => decode_base58(blob),
+    }
+}
+
+fn decode_rpc_json_transaction(json_str: &str) -> anyhow::Result<Vec<u8>> {
+    if let Ok(wrapper) = serde_json::from_str::<EncodedTransactionWithStatusMeta>(json_str)
+        && let Ok(bytes) = decode_encoded_transaction(wrapper.transaction)
+    {
+        return Ok(bytes);
+    }
+
+    // Fallback EncodedTransaction
+    let encoded: EncodedTransaction = serde_json::from_str(json_str).map_err(|e| {
+        anyhow!(
+            "Failed to parse RPC encoded transaction JSON: {e}. Expected EncodedTransaction or \
+             EncodedTransactionWithStatusMeta formats."
+        )
+    })?;
+
+    decode_encoded_transaction(encoded)
+}
+
+fn decode_encoded_transaction(encoded: EncodedTransaction) -> anyhow::Result<Vec<u8>> {
+    match encoded {
+        EncodedTransaction::LegacyBinary(blob) => decode_base58(&blob),
+        EncodedTransaction::Binary(blob, binary_encoding) => decode_binary(&blob, binary_encoding),
+        EncodedTransaction::Json(_) | EncodedTransaction::Accounts(_) => {
+            bail!("JSON-encoded transactions must include binary (base58/base64) data to simulate")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use {
         super::*, crate::constants::MEMO_PROGRAM_ID, solana_message::VersionedMessage,
         solana_transaction::versioned::VersionedTransaction,
     };
+
+    const MEMO_EXPECTED_SIGNATURE: &str =
+        "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
+    const MEMO_BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
 
     #[test]
     fn test_lamports_to_sol_exact_one_sol() {
@@ -227,42 +287,67 @@ mod tests {
     }
     #[test]
     fn test_decode_base64_memo_transaction() -> anyhow::Result<()> {
-        // Fixture: Real memo transaction from Solana devnet
-        const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
-        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
-
-        let decoded = decode_base64(BASE64_TX)?;
+        let decoded = decode_base64(MEMO_BASE64_TX)?;
         let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
 
-        assert_eq!(tx.signatures[0].to_string(), EXPECTED_SIGNATURE);
+        assert_eq!(tx.signatures[0].to_string(), MEMO_EXPECTED_SIGNATURE);
 
         Ok(())
     }
 
     #[test]
     fn test_decode_base58_memo_transaction() -> anyhow::Result<()> {
-        // Fixture: Real memo transaction from Solana devnet
-        const EXPECTED_SIGNATURE: &str = "2Bpup7xRM9TZ83J5Pk1wfECTcLyUXxb9nr4Buuv6UmePi5WjeiX4iZCPvcVwfkHj3Yanez6BWwLyEPyWydN9S6Hm";
-        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
-
         // Derive Base58 from Base64
-        let tx_bytes = base64::engine::general_purpose::STANDARD.decode(BASE64_TX)?;
+        let tx_bytes = base64::engine::general_purpose::STANDARD.decode(MEMO_BASE64_TX)?;
         let base58_tx = bs58::encode(&tx_bytes).into_string();
 
         let decoded = decode_base58(&base58_tx)?;
         let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
 
-        assert_eq!(tx.signatures[0].to_string(), EXPECTED_SIGNATURE);
+        assert_eq!(tx.signatures[0].to_string(), MEMO_EXPECTED_SIGNATURE);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_rpc_json_wrapper_transaction() -> anyhow::Result<()> {
+        let wrapper = EncodedTransactionWithStatusMeta {
+            transaction: EncodedTransaction::Binary(
+                MEMO_BASE64_TX.to_string(),
+                TransactionBinaryEncoding::Base64,
+            ),
+            meta: None,
+            version: None,
+        };
+
+        let json = serde_json::to_string(&wrapper)?;
+
+        let tx = decode_and_deserialize_transaction(UiTransactionEncoding::Json, &json)?;
+
+        assert_eq!(tx.signatures[0].to_string(), MEMO_EXPECTED_SIGNATURE);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_rpc_json_transaction_binary_variant() -> anyhow::Result<()> {
+        let encoded = EncodedTransaction::Binary(
+            MEMO_BASE64_TX.to_string(),
+            TransactionBinaryEncoding::Base64,
+        );
+
+        let json = serde_json::to_string(&encoded)?;
+
+        let tx = decode_and_deserialize_transaction(UiTransactionEncoding::JsonParsed, &json)?;
+
+        assert_eq!(tx.signatures[0].to_string(), MEMO_EXPECTED_SIGNATURE);
 
         Ok(())
     }
 
     #[test]
     fn test_memo_transaction_contains_memo_instruction() -> anyhow::Result<()> {
-        // Fixture: Real memo transaction from Solana devnet
-        const BASE64_TX: &str = "ATtaXBp3r800LbtPPC2iVkX22tKZkdkjzpaC1LOYy1SdiDmSSZXwvZTp0wl+y6fbzD7mSqs96e6g0K/YKJCqnAgBAAECuWsEsgM+Pjf2OiBR/sp5JD2IQPCSzSZb1z8en71VQy8FSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQbTKauGdNvrXHjR1ToMle1qSSO+Byroa3YXytgwv3XsAQEAC2Rldm5ldC10ZXN0";
-
-        let decoded = decode_base64(BASE64_TX)?;
+        let decoded = decode_base64(MEMO_BASE64_TX)?;
         let tx: VersionedTransaction = bincode_deserialize(&decoded, "transaction")?;
 
         let VersionedMessage::Legacy(message) = &tx.message else {

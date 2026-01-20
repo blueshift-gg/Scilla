@@ -18,6 +18,7 @@ base64.workspace = true
 bs58.workspace = true
 dirs.workspace = true
 toml.workspace = true
+serde_json.workspace = true
 
 # async
 tokio.workspace = true
@@ -48,6 +49,7 @@ solana-signature.workspace = true
 solana-nonce.workspace = true
 solana-transaction-status.workspace = true
 solana-system-interface.workspace = true
+solana-account-decoder.workspace = true
 
 [dev-dependencies]
 tempfile = "3.8"
