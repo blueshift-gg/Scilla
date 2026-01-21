@@ -9,15 +9,15 @@ use {
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
+    ptree::{TreeBuilder, print_tree},
     solana_account_decoder::UiAccount,
     solana_rpc_client_api::config::RpcTransactionConfig,
     solana_signature::Signature,
     solana_transaction_status::{
-        
-        EncodedTransaction, UiInnerInstructions, UiInstruction, UiMessage, UiParsedInstruction, UiTransactionEncoding,
-
+        EncodedTransaction, UiInnerInstructions, UiInstruction, UiMessage, UiParsedInstruction,
+        UiTransactionEncoding,
     },
-    std::{fmt, os::unix::process},
+    std::fmt,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -623,26 +623,43 @@ async fn process_parse_instructions(
 }
 
 fn display_instruction(idx: usize, ui_instruction: &UiInstruction) -> anyhow::Result<()> {
-    println!("{}", style(format!("Instruction #{}", idx)).cyan().bold());
+    let mut tree = TreeBuilder::new(format!("Instruction {}", idx));
 
     match ui_instruction {
         UiInstruction::Parsed(ui_parsed_ix) => match ui_parsed_ix {
-            UiParsedInstruction::Parsed(parsed_ix) => display_parsed_instruction(parsed_ix),
+            UiParsedInstruction::Parsed(parsed_ix) => {
+                display_parsed_instruction(&mut tree, parsed_ix)?;
+            }
             UiParsedInstruction::PartiallyDecoded(partial_ix) => {
-                display_partially_decoded_instruction(partial_ix)
+                display_partially_decoded_instruction(&mut tree, partial_ix)?;
             }
         },
-        UiInstruction::Compiled(compiled_ix) => display_compiled_instruction(compiled_ix),
+        UiInstruction::Compiled(compiled_ix) => {
+            display_compiled_instruction(&mut tree, compiled_ix)?;
+        }
     }
+
+    print_tree(&tree.build())?;
+    println!(); // Add spacing between instructions
+    Ok(())
 }
 
 fn display_parsed_instruction(
+    tree: &mut TreeBuilder,
     parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
 ) -> anyhow::Result<()> {
     use serde_json::Value;
 
+    tree.add_empty_child(format!("Program: {}", style(&parsed_ix.program).yellow()));
+
+    if parsed_ix.program == "spl-memo"
+        && let Value::String(memo) = &parsed_ix.parsed
+    {
+        return display_memo_instruction(tree, Some(&Value::String(memo.clone())));
+    }
+
     let Value::Object(parsed_map) = &parsed_ix.parsed else {
-        return display_generic_parsed(parsed_ix);
+        return display_generic_parsed(tree, parsed_ix);
     };
 
     let ix_type = parsed_map
@@ -650,149 +667,116 @@ fn display_parsed_instruction(
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    let info = parsed_map.get("info");
+    tree.add_empty_child(format!("Type: {}", style(ix_type).green()));
 
-    // Match on program name
     match parsed_ix.program.as_str() {
-        "system" => display_system_instruction(ix_type, info),
-        "spl-token" | "spl-token-2022" => display_token_instruction(ix_type, info),
-        "spl-associated-token-account" => display_ata_instruction(ix_type, info),
-        "spl-memo" => display_memo_instruction(info),
-        _ => display_generic_parsed(parsed_ix),
+        "system" => display_system_instruction(tree, ix_type, parsed_map.get("info"))?,
+        "spl-token" | "spl-token-2022" => {
+            display_token_instruction(tree, ix_type, parsed_map.get("info"))?
+        }
+        "spl-associated-token-account" => display_ata_instruction(tree, parsed_map.get("info"))?,
+        _ => display_generic_parsed(tree, parsed_ix)?,
     }
+
+    Ok(())
 }
 
 fn display_system_instruction(
+    tree: &mut TreeBuilder,
     ix_type: &str,
     info: Option<&serde_json::Value>,
 ) -> anyhow::Result<()> {
     use serde_json::Value;
 
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![Cell::new("Program"), Cell::new("System Program")])
-        .add_row(vec![Cell::new("Type"), Cell::new(ix_type)]);
-
     if let Some(Value::Object(info_map)) = info {
         match ix_type {
             "transfer" => {
-                if let (Some(source), Some(destination), Some(lamports)) = (
-                    info_map.get("source").and_then(|v| v.as_str()),
-                    info_map.get("destination").and_then(|v| v.as_str()),
-                    info_map.get("lamports").and_then(|v| v.as_u64()),
-                ) {
-                    table
-                        .add_row(vec![Cell::new("From"), Cell::new(source)])
-                        .add_row(vec![Cell::new("To"), Cell::new(destination)])
-                        .add_row(vec![
-                            Cell::new("Amount"),
-                            Cell::new(format!(
-                                "{} lamports ({} SOL)",
-                                lamports,
-                                crate::misc::helpers::lamports_to_sol(lamports)
-                            )),
-                        ]);
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "From", style(source).cyan()));
+                }
+                if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "To", style(destination).cyan()));
+                }
+                if let Some(lamports) = info_map.get("lamports").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!(
+                        "Amount: {} lamports ({} SOL)",
+                        lamports,
+                        crate::misc::helpers::lamports_to_sol(lamports)
+                    ));
                 }
             }
             "createAccount" => {
-                if let (Some(source), Some(new_account), Some(lamports), Some(space), Some(owner)) = (
-                    info_map.get("source").and_then(|v| v.as_str()),
-                    info_map.get("newAccount").and_then(|v| v.as_str()),
-                    info_map.get("lamports").and_then(|v| v.as_u64()),
-                    info_map.get("space").and_then(|v| v.as_u64()),
-                    info_map.get("owner").and_then(|v| v.as_str()),
-                ) {
-                    table
-                        .add_row(vec![Cell::new("Funder"), Cell::new(source)])
-                        .add_row(vec![Cell::new("New Account"), Cell::new(new_account)])
-                        .add_row(vec![
-                            Cell::new("Lamports"),
-                            Cell::new(format!(
-                                "{} lamports ({} SOL)",
-                                lamports,
-                                crate::misc::helpers::lamports_to_sol(lamports)
-                            )),
-                        ])
-                        .add_row(vec![
-                            Cell::new("Space"),
-                            Cell::new(format!("{} bytes", space)),
-                        ])
-                        .add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Funder", style(source).cyan()));
+                }
+                if let Some(new_account) = info_map.get("newAccount").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!(
+                        "{}: {}",
+                        "New Account",
+                        style(new_account).cyan()
+                    ));
+                }
+                if let Some(lamports) = info_map.get("lamports").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Lamports: {}", lamports));
+                }
+                if let Some(space) = info_map.get("space").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Space: {} bytes", space));
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Owner: {}", owner));
                 }
             }
             "assign" => {
-                if let (Some(account), Some(owner)) = (
-                    info_map.get("account").and_then(|v| v.as_str()),
-                    info_map.get("owner").and_then(|v| v.as_str()),
-                ) {
-                    table
-                        .add_row(vec![Cell::new("Account"), Cell::new(account)])
-                        .add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Account: {}", account));
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Owner: {}", owner));
                 }
             }
             "allocate" => {
-                if let (Some(account), Some(space)) = (
-                    info_map.get("account").and_then(|v| v.as_str()),
-                    info_map.get("space").and_then(|v| v.as_u64()),
-                ) {
-                    table
-                        .add_row(vec![Cell::new("Account"), Cell::new(account)])
-                        .add_row(vec![
-                            Cell::new("Space"),
-                            Cell::new(format!("{} bytes", space)),
-                        ]);
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Account: {}", account));
+                }
+                if let Some(space) = info_map.get("space").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Space: {} bytes", space));
                 }
             }
             _ => {
-                // Generic display for other system instructions
+                // Generic display
                 for (key, value) in info_map {
-                    let display_value = match value {
-                        Value::Object(_) => serde_json::to_string_pretty(value)?,
-                        Value::Array(_) => serde_json::to_string(value)?,
-                        _ => value.to_string().trim_matches('"').to_string(),
-                    };
-                    table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
+                    if let Some(s) = value.as_str() {
+                        tree.add_empty_child(format!("{}: {}", key, s));
+                    }
                 }
             }
         }
     }
 
-    println!("{}\n", table);
     Ok(())
 }
 
 fn display_token_instruction(
+    tree: &mut TreeBuilder,
     ix_type: &str,
     info: Option<&serde_json::Value>,
 ) -> anyhow::Result<()> {
     use serde_json::Value;
-
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![Cell::new("Program"), Cell::new("Token Program")])
-        .add_row(vec![Cell::new("Type"), Cell::new(ix_type)]);
 
     if let Some(Value::Object(info_map)) = info {
         match ix_type {
             "transfer" | "transferChecked" => {
                 if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("From"), Cell::new(source)]);
+                    tree.add_empty_child(format!("{}: {}", style("From"), style(source).cyan()));
                 }
                 if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("To"), Cell::new(destination)]);
+                    tree.add_empty_child(format!("{}: {}", style("To"), style(destination).cyan()));
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Mint", style(mint).cyan()));
                 }
 
-                // Amount - try tokenAmount object first, then fall back to amount field
+                // Amount
                 if let Some(token_amount) = info_map.get("tokenAmount") {
                     if let Some(ui_amount_str) =
                         token_amount.get("uiAmountString").and_then(|v| v.as_str())
@@ -801,10 +785,10 @@ fn display_token_instruction(
                             .get("decimals")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
-                        table.add_row(vec![
-                            Cell::new("Amount"),
-                            Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
-                        ]);
+                        tree.add_empty_child(format!(
+                            "Amount: {} (decimals: {})",
+                            ui_amount_str, decimals
+                        ));
                     }
                 } else if let Some(amount_val) = info_map.get("amount") {
                     let amount = if let Some(s) = amount_val.as_str() {
@@ -814,28 +798,18 @@ fn display_token_instruction(
                     } else {
                         amount_val.to_string()
                     };
-                    table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
-                }
-
-                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
-                }
-
-                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str())
-                {
-                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
-                } else if let Some(authority) = info_map.get("authority").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
+                    tree.add_empty_child(format!("Amount: {}", amount));
                 }
             }
             "mintTo" | "mintToChecked" => {
                 if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                    tree.add_empty_child(format!("{}: {}", "Mint", style(mint).cyan()));
                 }
                 if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                    tree.add_empty_child(format!("{}: {}", "To", style(account).cyan()));
                 }
 
+                // Amount
                 if let Some(token_amount) = info_map.get("tokenAmount") {
                     if let Some(ui_amount_str) =
                         token_amount.get("uiAmountString").and_then(|v| v.as_str())
@@ -844,10 +818,10 @@ fn display_token_instruction(
                             .get("decimals")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
-                        table.add_row(vec![
-                            Cell::new("Amount"),
-                            Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
-                        ]);
+                        tree.add_empty_child(format!(
+                            "Amount: {} (decimals: {})",
+                            ui_amount_str, decimals
+                        ));
                     }
                 } else if let Some(amount_val) = info_map.get("amount") {
                     let amount = if let Some(s) = amount_val.as_str() {
@@ -857,26 +831,18 @@ fn display_token_instruction(
                     } else {
                         amount_val.to_string()
                     };
-                    table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
-                }
-
-                if let Some(authority) = info_map.get("mintAuthority").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint Authority"), Cell::new(authority)]);
-                } else if let Some(authority) = info_map
-                    .get("multisigMintAuthority")
-                    .and_then(|v| v.as_str())
-                {
-                    table.add_row(vec![Cell::new("Mint Authority"), Cell::new(authority)]);
+                    tree.add_empty_child(format!("Amount: {}", amount));
                 }
             }
             "burn" | "burnChecked" => {
                 if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                    tree.add_empty_child(format!("{}: {}", "Burn From", style(account).cyan()));
                 }
                 if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                    tree.add_empty_child(format!("{}: {}", "Mint", style(mint).cyan()));
                 }
 
+                // Amount
                 if let Some(token_amount) = info_map.get("tokenAmount") {
                     if let Some(ui_amount_str) =
                         token_amount.get("uiAmountString").and_then(|v| v.as_str())
@@ -885,10 +851,10 @@ fn display_token_instruction(
                             .get("decimals")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
-                        table.add_row(vec![
-                            Cell::new("Amount"),
-                            Cell::new(format!("{} (decimals: {})", ui_amount_str, decimals)),
-                        ]);
+                        tree.add_empty_child(format!(
+                            "Amount: {} (decimals: {})",
+                            ui_amount_str, decimals
+                        ));
                     }
                 } else if let Some(amount_val) = info_map.get("amount") {
                     let amount = if let Some(s) = amount_val.as_str() {
@@ -898,323 +864,212 @@ fn display_token_instruction(
                     } else {
                         amount_val.to_string()
                     };
-                    table.add_row(vec![Cell::new("Amount"), Cell::new(amount)]);
-                }
-
-                if let Some(authority) = info_map.get("multisigAuthority").and_then(|v| v.as_str())
-                {
-                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
-                } else if let Some(authority) = info_map.get("authority").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Authority"), Cell::new(authority)]);
+                    tree.add_empty_child(format!("Amount: {}", amount));
                 }
             }
             "initializeMint" | "initializeMint2" => {
                 if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                    tree.add_empty_child(format!("Mint: {}", style(mint).cyan()));
                 }
                 if let Some(decimals) = info_map.get("decimals").and_then(|v| v.as_u64()) {
-                    table.add_row(vec![Cell::new("Decimals"), Cell::new(decimals)]);
+                    tree.add_empty_child(format!("Decimals: {}", decimals));
                 }
                 if let Some(mint_authority) = info_map.get("mintAuthority").and_then(|v| v.as_str())
                 {
-                    table.add_row(vec![Cell::new("Mint Authority"), Cell::new(mint_authority)]);
+                    tree.add_empty_child(format!("Mint Authority: {}", mint_authority));
                 }
                 if let Some(freeze_authority) =
                     info_map.get("freezeAuthority").and_then(|v| v.as_str())
                 {
-                    table.add_row(vec![
-                        Cell::new("Freeze Authority"),
-                        Cell::new(freeze_authority),
-                    ]);
+                    tree.add_empty_child(format!("Freeze Authority: {}", freeze_authority));
                 }
             }
             "initializeAccount" | "initializeAccount2" | "initializeAccount3" => {
                 if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                    tree.add_empty_child(format!("Account: {}", account));
                 }
                 if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
+                    tree.add_empty_child(format!("Mint: {}", mint));
                 }
                 if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                    tree.add_empty_child(format!("Owner: {}", owner));
                 }
             }
             "closeAccount" => {
                 if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Account"), Cell::new(account)]);
+                    tree.add_empty_child(format!("Account: {}", account));
                 }
                 if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Destination"), Cell::new(destination)]);
+                    tree.add_empty_child(format!("Destination: {}", destination));
                 }
                 if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Owner"), Cell::new(owner)]);
+                    tree.add_empty_child(format!("Owner: {}", owner));
                 }
             }
             _ => {
-                // Generic display for other token instructions
+                // Generic display
                 for (key, value) in info_map {
-                    let display_value = match value {
-                        Value::Object(_) => serde_json::to_string_pretty(value)?,
-                        Value::Array(_) => serde_json::to_string(value)?,
-                        _ => value.to_string().trim_matches('"').to_string(),
-                    };
-                    table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
-                }
-            }
-        }
-    }
-
-    println!("{}\n", table);
-    Ok(())
-}
-
-fn display_ata_instruction(ix_type: &str, info: Option<&serde_json::Value>) -> anyhow::Result<()> {
-    use serde_json::Value;
-
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![
-            Cell::new("Program"),
-            Cell::new("Associated Token Account Program"),
-        ])
-        .add_row(vec![Cell::new("Type"), Cell::new(ix_type)]);
-
-    if let Some(Value::Object(info_map)) = info {
-        match ix_type {
-            "create" => {
-                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Funder"), Cell::new(source)]);
-                }
-                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("ATA"), Cell::new(account)]);
-                }
-                if let Some(wallet) = info_map.get("wallet").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Owner"), Cell::new(wallet)]);
-                }
-                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
-                    table.add_row(vec![Cell::new("Mint"), Cell::new(mint)]);
-                }
-            }
-            _ => {
-                for (key, value) in info_map {
-                    if key == "systemProgram" || key == "tokenProgram" {
-                        continue;
-                    }
-
                     let display_value = match value {
                         Value::String(s) => s.clone(),
-                        Value::Object(_) => serde_json::to_string_pretty(value)?,
-                        Value::Array(_) => serde_json::to_string(value)?,
-                        _ => value.to_string(),
+                        _ => value.to_string().trim_matches('"').to_string(),
                     };
-                    table.add_row(vec![Cell::new(key), Cell::new(display_value)]);
+                    tree.add_empty_child(format!("{}: {}", key, display_value));
                 }
             }
         }
     }
 
-    println!("{}\n", table);
     Ok(())
 }
 
-fn display_memo_instruction(info: Option<&serde_json::Value>) -> anyhow::Result<()> {
+fn display_ata_instruction(
+    tree: &mut TreeBuilder,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
     use serde_json::Value;
 
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![Cell::new("Program"), Cell::new("Memo Program")]);
+    if let Some(Value::Object(info_map)) = info {
+        for (key, value) in info_map {
+            if key == "systemProgram" || key == "tokenProgram" {
+                continue;
+            }
 
-    if let Some(Value::String(memo)) = info {
-        table.add_row(vec![Cell::new("Memo"), Cell::new(memo)]);
+            let display_value = match value {
+                Value::String(s) => s.clone(),
+                _ => value.to_string().trim_matches('"').to_string(),
+            };
+
+            let label = match key.as_str() {
+                "source" => "Funder",
+                "account" => "ATA",
+                "wallet" => "Owner",
+                "mint" => "Mint",
+                _ => key,
+            };
+
+            tree.add_empty_child(format!("{}: {}", label, style(&display_value).cyan()));
+        }
     }
 
-    println!("{}\n", table);
+    Ok(())
+}
+
+fn display_memo_instruction(
+    tree: &mut TreeBuilder,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    if let Some(Value::String(memo)) = info {
+        tree.add_empty_child(format!("Memo: {}", memo));
+    }
+
     Ok(())
 }
 
 fn display_generic_parsed(
+    tree: &mut TreeBuilder,
     parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
 ) -> anyhow::Result<()> {
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![Cell::new("Program"), Cell::new(&parsed_ix.program)])
-        .add_row(vec![
-            Cell::new("Program ID"),
-            Cell::new(&parsed_ix.program_id),
-        ]);
+    tree.add_empty_child(format!("Program ID: {}", &parsed_ix.program_id));
+    tree.add_empty_child(format!(
+        "Parsed Data: {}",
+        serde_json::to_string_pretty(&parsed_ix.parsed)?
+    ));
 
-    println!("{}", table);
-    println!("{}", style("Parsed Data:").dim());
-    println!("{}\n", serde_json::to_string_pretty(&parsed_ix.parsed)?);
     Ok(())
 }
 
 fn display_partially_decoded_instruction(
+    tree: &mut TreeBuilder,
     partial_ix: &solana_transaction_status::UiPartiallyDecodedInstruction,
 ) -> anyhow::Result<()> {
+    // Check if this is a Compute Budget instruction
     if partial_ix.program_id == COMPUTE_BUDGET_PROGRAM_ID {
-        return display_compute_budget_instruction(&partial_ix.data);
+        tree.add_empty_child(format!("Program: {}", style("Compute Budget").yellow()));
+        display_compute_budget_instruction(tree, &partial_ix.data)?;
+        return Ok(());
     }
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![
-            Cell::new("Program ID"),
-            Cell::new(&partial_ix.program_id),
-        ])
-        .add_row(vec![Cell::new("Program"), Cell::new("Unknown Program")])
-        .add_row(vec![
-            Cell::new("Accounts"),
-            Cell::new(partial_ix.accounts.len()),
-        ])
-        .add_row(vec![
-            Cell::new("Data (Base58)"),
-            Cell::new(&partial_ix.data),
-        ]);
 
-    println!("{}\n", table);
+    // Unknown program
+    tree.add_empty_child(format!(
+        "Program: {} {}",
+        style("Unknown").red(),
+        &partial_ix.program_id
+    ));
+    tree.add_empty_child(format!("Accounts: {}", partial_ix.accounts.len()));
+    tree.add_empty_child(format!("Data: {}", partial_ix.data));
+
     Ok(())
 }
-fn display_compute_budget_instruction(data_base58: &str) -> anyhow::Result<()> {
+
+fn display_compute_budget_instruction(
+    tree: &mut TreeBuilder,
+    data_base58: &str,
+) -> anyhow::Result<()> {
     let data = bs58::decode(data_base58).into_vec()?;
 
     if data.is_empty() {
         return Ok(());
     }
 
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![
-            Cell::new("Program"),
-            Cell::new("Compute Budget Program"),
-        ]);
-
     match data[0] {
         0 => {
-            // RequestHeapFrame
             if data.len() >= 5 {
                 let bytes = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
-                table
-                    .add_row(vec![Cell::new("Type"), Cell::new("Request Heap Frame")])
-                    .add_row(vec![
-                        Cell::new("Heap Frame Size"),
-                        Cell::new(format!("{} bytes", bytes)),
-                    ]);
+                tree.add_empty_child(format!("Type: {}", style("Request Heap Frame").green()));
+                tree.add_empty_child(format!("Heap Frame Size: {} bytes", bytes));
             }
         }
         1 => {
-            // SetComputeUnitLimit
             if data.len() >= 5 {
                 let units = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
-                table
-                    .add_row(vec![Cell::new("Type"), Cell::new("Set Compute Unit Limit")])
-                    .add_row(vec![
-                        Cell::new("Compute Units"),
-                        Cell::new(format!("{}", units)),
-                    ]);
+                tree.add_empty_child(format!("Type: {}", style("Set Compute Unit Limit").green()));
+                tree.add_empty_child(format!("Compute Units: {}", units));
             }
         }
         2 => {
-            // SetComputeUnitPrice
-            // Handle both u64 (9 bytes) and u32 (5 bytes) formats
             let micro_lamports = if data.len() >= 9 {
                 u64::from_le_bytes([
                     data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
                 ])
             } else if data.len() >= 5 {
-                // Pad u32 to u64
-                u64::from_le_bytes([
-                    data[1], data[2], data[3], data[4], 0, 0, 0, 0, // Zero-pad the upper bytes
-                ])
+                u64::from_le_bytes([data[1], data[2], data[3], data[4], 0, 0, 0, 0])
             } else {
-                0 // Shouldn't happen, but safe fallback
+                0
             };
-
-            table
-                .add_row(vec![Cell::new("Type"), Cell::new("Set Compute Unit Price")])
-                .add_row(vec![
-                    Cell::new("Priority Fee"),
-                    Cell::new(format!("{} micro-lamports/CU", micro_lamports)),
-                ]);
+            tree.add_empty_child(format!("Type: {}", style("Set Compute Unit Price").green()));
+            tree.add_empty_child(format!(
+                "Priority Fee: {} micro-lamports/CU",
+                micro_lamports
+            ));
         }
         3 => {
-            // SetLoadedAccountsDataSizeLimit
             if data.len() >= 5 {
                 let bytes = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
-                table
-                    .add_row(vec![
-                        Cell::new("Type"),
-                        Cell::new("Set Loaded Accounts Data Size Limit"),
-                    ])
-                    .add_row(vec![
-                        Cell::new("Size Limit"),
-                        Cell::new(format!("{} bytes", bytes)),
-                    ]);
+                tree.add_empty_child(format!(
+                    "Type: {}",
+                    style("Set Loaded Accounts Data Size Limit").green()
+                ));
+                tree.add_empty_child(format!("Size Limit: {} bytes", bytes));
             }
         }
         _ => {
-            // Unknown or future instruction types
-            table
-                .add_row(vec![
-                    Cell::new("Type"),
-                    Cell::new("Unknown Compute Budget Instruction"),
-                ])
-                .add_row(vec![Cell::new("Discriminator"), Cell::new(data[0])])
-                .add_row(vec![Cell::new("Data (Base58)"), Cell::new(data_base58)]);
+            tree.add_empty_child(format!("Unknown instruction type: {}", data[0]));
         }
     }
 
-    println!("{}\n", table);
     Ok(())
 }
 
 fn display_compiled_instruction(
+    tree: &mut TreeBuilder,
     compiled_ix: &solana_transaction_status::UiCompiledInstruction,
 ) -> anyhow::Result<()> {
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header(vec![
-            Cell::new("Field").add_attribute(comfy_table::Attribute::Bold),
-            Cell::new("Value").add_attribute(comfy_table::Attribute::Bold),
-        ])
-        .add_row(vec![
-            Cell::new("Program Index"),
-            Cell::new(compiled_ix.program_id_index),
-        ])
-        .add_row(vec![
-            Cell::new("Accounts"),
-            Cell::new(compiled_ix.accounts.len()),
-        ])
-        .add_row(vec![
-            Cell::new("Data (Base58)"),
-            Cell::new(&compiled_ix.data),
-        ]);
+    tree.add_empty_child(format!("Type: {}", "Compiled"));
+    tree.add_empty_child(format!("Program Index: {}", compiled_ix.program_id_index));
+    tree.add_empty_child(format!("Accounts: {}", compiled_ix.accounts.len()));
+    tree.add_empty_child(format!("Data: {}", compiled_ix.data));
 
-    println!("{}\n", table);
     Ok(())
 }
