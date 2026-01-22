@@ -4,7 +4,7 @@ use {
             Command,
             navigation::{NavigationSection, NavigationTarget},
         },
-        error::{ScillaError, ScillaResult},
+        error::ScillaResult,
     },
     commands::CommandFlow,
     config::ScillaConfig,
@@ -27,7 +27,7 @@ pub mod ui;
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ScillaResult {
     if let Some(command) = cli::parse_from_env() {
-        cli::process(command).map_err(ScillaError::from)?;
+        cli::process(command)?;
         exit(0);
     }
 
