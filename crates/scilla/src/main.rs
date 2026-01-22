@@ -4,15 +4,17 @@ use {
             Command,
             navigation::{NavigationSection, NavigationTarget},
         },
-        error::ScillaResult,
+        error::{ScillaError, ScillaResult},
     },
     commands::CommandFlow,
     config::ScillaConfig,
     console::style,
     context::ScillaContext,
     prompt::prompt_main_section,
+    std::process::exit,
 };
 
+pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod constants;
@@ -24,6 +26,11 @@ pub mod ui;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ScillaResult {
+    if let Some(command) = cli::parse_from_env() {
+        cli::process(command).map_err(ScillaError::from)?;
+        exit(0);
+    }
+
     println!(
         "{}",
         style("⚡ Scilla — Hacking Through the Solana Matrix")

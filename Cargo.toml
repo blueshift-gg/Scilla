@@ -58,3 +58,6 @@ solana-nonce = "3.0.0"
 solana-transaction-status = "3.1.4"
 solana-system-interface = { version = "3.0.0", features = ["bincode"] }
 solana-account-decoder = "3.1.6"
+
+# build
+sbpf-linker = "0.1.6"
