@@ -33,7 +33,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow {
         }
     };
 
-    let (program_data_address, current_size) =
+    let (program_data_address, current_size, current_lamports) =
         match fetch_current_program_info(ctx, &program_address).await {
             Ok(info) => info,
             Err(e) => {
@@ -52,14 +52,13 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow {
                  bytes). No extension needed.",
                 program_file_size, current_size
             ))
-            .red()
+            .yellow()
         );
         return CommandFlow::Processed;
     };
 
     let (additional_rent, new_size) =
-        match calculate_extension_cost(ctx, &program_data_address, current_size, additional_bytes)
-            .await
+        match calculate_extension_cost(ctx, current_lamports, current_size, additional_bytes).await
         {
             Ok(cost) => cost,
             Err(e) => {
@@ -143,7 +142,7 @@ pub async fn process_extend(ctx: &ScillaContext) -> CommandFlow {
 async fn fetch_current_program_info(
     ctx: &ScillaContext,
     program_address: &Pubkey,
-) -> anyhow::Result<(Pubkey, usize)> {
+) -> anyhow::Result<(Pubkey, usize, u64)> {
     let program_account = ctx
         .rpc()
         .get_account(program_address)
@@ -178,13 +177,14 @@ async fn fetch_current_program_info(
         })?;
 
     let current_size = program_data_account.data.len();
+    let current_lamports = program_data_account.lamports;
 
-    Ok((program_data_address, current_size))
+    Ok((program_data_address, current_size, current_lamports))
 }
 
 async fn calculate_extension_cost(
     ctx: &ScillaContext,
-    program_data_address: &Pubkey,
+    current_lamports: u64,
     current_size: usize,
     additional_bytes: u32,
 ) -> anyhow::Result<(u64, usize)> {
@@ -201,24 +201,13 @@ async fn calculate_extension_cost(
         );
     }
 
-    let program_data_account = ctx
-        .rpc()
-        .get_account(program_data_address)
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to fetch program data account: {}",
-                program_data_address
-            )
-        })?;
-
     let required_balance = ctx
         .rpc()
         .get_minimum_balance_for_rent_exemption(new_size)
         .await
         .with_context(|| "Failed to get minimum balance for rent exemption")?;
 
-    let additional_rent = required_balance.saturating_sub(program_data_account.lamports);
+    let additional_rent = required_balance.saturating_sub(current_lamports);
 
     Ok((additional_rent, new_size))
 }
