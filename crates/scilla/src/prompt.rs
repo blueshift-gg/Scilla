@@ -3,6 +3,7 @@ use {
         commands::{
             Command,
             account::AccountCommand,
+            build::{BuildCommand, BuildMode},
             cluster::ClusterCommand,
             config::ConfigCommand,
             main_command::MainCommand,
@@ -31,6 +32,7 @@ pub fn prompt_main_section() -> anyhow::Result<impl Command> {
             MainCommand::Program,
             MainCommand::Vote,
             MainCommand::Transaction,
+            MainCommand::Build,
             MainCommand::ScillaConfig,
             MainCommand::Exit,
         ],
@@ -108,6 +110,17 @@ pub fn prompt_program_section() -> anyhow::Result<ProgramCommand> {
             ProgramCommand::ProgramV4,
             ProgramCommand::GoBack,
         ],
+    )
+    .with_page_size(10)
+    .prompt()?;
+
+    Ok(choice)
+}
+
+pub fn prompt_build_section() -> anyhow::Result<BuildCommand> {
+    let choice = Select::new(
+        "Build Command:",
+        vec![BuildCommand::Build, BuildCommand::GoBack],
     )
     .with_page_size(10)
     .prompt()?;
@@ -270,6 +283,13 @@ pub fn prompt_confirmation(msg: &str) -> bool {
     Confirm::new(msg).prompt().unwrap_or(false)
 }
 
+pub fn prompt_confirm_install(msg: &str) -> bool {
+    Confirm::new(msg)
+        .with_default(true)
+        .prompt()
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Network {
     Mainnet,
@@ -331,4 +351,10 @@ pub fn prompt_encoding_options() -> UiTransactionEncoding {
             UiTransactionEncoding::JsonParsed,
         ],
     )
+}
+
+pub fn prompt_build_mode() -> anyhow::Result<BuildMode> {
+    let options = vec![BuildMode::Upstream, BuildMode::Solana];
+    let selection = Select::new("Select build mode:", options).prompt()?;
+    Ok(selection)
 }

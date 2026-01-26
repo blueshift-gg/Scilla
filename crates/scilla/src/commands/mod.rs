@@ -5,6 +5,7 @@ use {
 };
 
 pub mod account;
+pub mod build;
 pub mod cluster;
 pub mod config;
 pub mod main_command;
