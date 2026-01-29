@@ -264,7 +264,7 @@ async fn fetch_validators(ctx: &ScillaContext) -> anyhow::Result<()> {
     // Validators detail table
     if !validators.current.is_empty() {
         let mut validators = validators.current;
-        validators.sort_by(|a, b| b.activated_stake.cmp(&a.activated_stake)); // descending
+        validators.sort_by_key(|v| std::cmp::Reverse(v.activated_stake)); // descending
 
         let mut validators_table = Table::new();
         validators_table.load_preset(UTF8_FULL).set_header(vec![
