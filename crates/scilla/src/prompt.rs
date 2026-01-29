@@ -51,6 +51,7 @@ pub fn prompt_account_section() -> anyhow::Result<AccountCommand> {
             AccountCommand::LargestAccounts,
             AccountCommand::NonceAccount,
             AccountCommand::Rent,
+            AccountCommand::GetAddress,
             AccountCommand::GoBack,
         ],
     )
@@ -251,10 +252,11 @@ pub fn prompt_keypair_path(msg: &str, ctx: &ScillaContext) -> PathBuf {
             },
         };
 
-        let input = if input.trim().is_empty() {
+        let input = input.trim();
+        let input = if input.is_empty() {
             &default_path
         } else {
-            &input
+            input
         };
 
         match PathBuf::from_str(input) {

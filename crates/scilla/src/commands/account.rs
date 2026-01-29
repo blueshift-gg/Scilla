@@ -5,14 +5,18 @@ use {
             navigation::{NavigationSection, NavigationTarget},
         },
         context::ScillaContext,
-        misc::helpers::{bincode_deserialize, build_and_send_tx, lamports_to_sol, sol_to_lamports},
-        prompt::prompt_input_data,
+        misc::helpers::{
+            bincode_deserialize, build_and_send_tx, lamports_to_sol, read_keypair_from_path,
+            sol_to_lamports,
+        },
+        prompt::{prompt_input_data, prompt_keypair_path},
         ui::{print_error, show_spinner},
     },
     anyhow::bail,
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     inquire::Select,
+    solana_keypair::Signer,
     solana_nonce::versions::Versions,
     solana_pubkey::Pubkey,
     solana_rpc_client_api::config::{RpcLargestAccountsConfig, RpcLargestAccountsFilter},
@@ -30,6 +34,7 @@ pub enum AccountCommand {
     LargestAccounts,
     NonceAccount,
     Rent,
+    GetAddress,
     GoBack,
 }
 
@@ -43,6 +48,7 @@ impl AccountCommand {
             AccountCommand::LargestAccounts => "Fetching largest accounts on the cluster…",
             AccountCommand::NonceAccount => "Inspecting or managing durable nonces…",
             AccountCommand::Rent => "Checking rent…",
+            AccountCommand::GetAddress => "Resolving address from keypair…",
             AccountCommand::GoBack => "Going back…",
         }
     }
@@ -58,6 +64,7 @@ impl fmt::Display for AccountCommand {
             AccountCommand::LargestAccounts => "View largest accounts",
             AccountCommand::NonceAccount => "View nonce account",
             AccountCommand::Rent => "Check rent",
+            AccountCommand::GetAddress => "Get address from keypair",
             AccountCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
@@ -96,6 +103,10 @@ impl Command for AccountCommand {
                 // get the rent for data bytes used in account
                 let bytes: usize = prompt_input_data("Enter data size in bytes:");
                 show_spinner(self.spinner_msg(), fetch_rent(ctx, bytes)).await;
+            }
+            AccountCommand::GetAddress => {
+                let path = prompt_keypair_path("Enter keypair path:", ctx);
+                show_spinner(self.spinner_msg(), resolve_address(&path)).await;
             }
             AccountCommand::GoBack => {
                 return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
@@ -339,5 +350,15 @@ async fn fetch_rent(ctx: &ScillaContext, bytes: usize) -> anyhow::Result<()> {
     println!("\n{}", style("RENT EXEMPTION").green().bold());
     println!("{table}");
 
+    Ok(())
+}
+
+async fn resolve_address(path: &std::path::Path) -> anyhow::Result<()> {
+    let keypair = read_keypair_from_path(path)?;
+    println!(
+        "{} {}",
+        style("Address:").green().bold(),
+        style(keypair.pubkey()).cyan()
+    );
     Ok(())
 }
