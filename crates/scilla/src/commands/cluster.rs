@@ -10,7 +10,7 @@ use {
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
-    std::{fmt, ops::Div},
+    std::{cmp::Reverse, fmt, ops::Div},
 };
 
 /// Commands related to cluster operations
@@ -264,7 +264,7 @@ async fn fetch_validators(ctx: &ScillaContext) -> anyhow::Result<()> {
     // Validators detail table
     if !validators.current.is_empty() {
         let mut validators = validators.current;
-        validators.sort_by(|a, b| b.activated_stake.cmp(&a.activated_stake)); // descending
+        validators.sort_by_key(|b| Reverse(b.activated_stake)); // descending
 
         let mut validators_table = Table::new();
         validators_table.load_preset(UTF8_FULL).set_header(vec![
