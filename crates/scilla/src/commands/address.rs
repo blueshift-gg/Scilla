@@ -12,8 +12,7 @@ use {
     console::style,
     solana_keypair::Signer,
     solana_pubkey::Pubkey,
-    std::fmt,
-    std::path::Path,
+    std::{fmt, path::Path},
 };
 
 /// Commands related to keypair and address utilities
