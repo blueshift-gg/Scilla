@@ -3,6 +3,7 @@ use {
         commands::{
             Command,
             account::AccountCommand,
+            address::AddressCommand,
             cluster::ClusterCommand,
             config::ConfigCommand,
             main_command::MainCommand,
@@ -32,6 +33,7 @@ pub fn prompt_main_section() -> anyhow::Result<impl Command> {
             MainCommand::Vote,
             MainCommand::Transaction,
             MainCommand::ScillaConfig,
+            MainCommand::Address,
             MainCommand::Exit,
         ],
     )
@@ -51,7 +53,6 @@ pub fn prompt_account_section() -> anyhow::Result<AccountCommand> {
             AccountCommand::LargestAccounts,
             AccountCommand::NonceAccount,
             AccountCommand::Rent,
-            AccountCommand::GetAddress,
             AccountCommand::GoBack,
         ],
     )
@@ -161,6 +162,20 @@ pub fn prompt_transaction_section() -> anyhow::Result<TransactionCommand> {
             TransactionCommand::SendTransaction,
             TransactionCommand::SimulateTransaction,
             TransactionCommand::GoBack,
+        ],
+    )
+    .prompt()?;
+
+    Ok(choice)
+}
+
+pub fn prompt_address_section() -> anyhow::Result<AddressCommand> {
+    let choice = Select::new(
+        "Address Command:",
+        vec![
+            AddressCommand::Address,
+            AddressCommand::DerivePda,
+            AddressCommand::GoBack,
         ],
     )
     .prompt()?;
