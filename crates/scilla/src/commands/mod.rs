@@ -5,6 +5,7 @@ use {
 };
 
 pub mod account;
+pub mod address;
 pub mod alt;
 pub mod cluster;
 pub mod config;
