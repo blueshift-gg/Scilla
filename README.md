@@ -14,7 +14,7 @@ With Scilla, you can easily **inspect on-chain data**, **query cluster state**, 
 ```bash
 # Clone and build
 git clone https://github.com/blueshift-gg/Scilla
-cd Scilla
+cd Scilla/crates/scilla
 cargo install --path .
 ```
 ---
