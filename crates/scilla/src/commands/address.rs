@@ -75,4 +75,3 @@ impl Command for AddressCommand {
         Ok(CommandFlow::Processed)
     }
 }
-
