@@ -268,11 +268,6 @@ pub fn prompt_keypair_path(msg: &str, ctx: &ScillaContext) -> PathBuf {
         };
 
         let input = input.trim();
-        let input = if input.is_empty() {
-            &default_path
-        } else {
-            input
-        };
 
         match PathBuf::from_str(input) {
             Ok(value) => return value,
