@@ -7,12 +7,11 @@ use {
         context::ScillaContext,
         misc::helpers::read_keypair_from_path,
         prompt::{prompt_input_data, prompt_keypair_path},
-        ui::show_spinner,
     },
     console::style,
     solana_keypair::Signer,
     solana_pubkey::Pubkey,
-    std::{fmt, path::Path},
+    std::fmt,
 };
 
 /// Commands related to keypair and address utilities
@@ -21,16 +20,6 @@ pub enum AddressCommand {
     Address,
     DerivePda,
     GoBack,
-}
-
-impl AddressCommand {
-    pub fn spinner_msg(&self) -> &'static str {
-        match self {
-            AddressCommand::Address => "Resolving address…",
-            AddressCommand::DerivePda => "Deriving PDA…",
-            AddressCommand::GoBack => "Going back…",
-        }
-    }
 }
 
 impl fmt::Display for AddressCommand {
@@ -51,7 +40,14 @@ impl Command for AddressCommand {
         match self {
             AddressCommand::Address => {
                 let path = prompt_keypair_path("Enter keypair path:", ctx);
-                show_spinner(self.spinner_msg(), resolve_address(&path)).await;
+                let keypair = read_keypair_from_path(&path)?;
+                println!(
+                    "{} {}\n{} {}",
+                    style("Keypair path:").green().bold(),
+                    style(path.display()).cyan(),
+                    style("Address:").green().bold(),
+                    style(keypair.pubkey()).cyan()
+                );
             }
             AddressCommand::DerivePda => {
                 let program_id: Pubkey = prompt_input_data("Enter program ID:");
@@ -62,7 +58,14 @@ impl Command for AddressCommand {
                     .filter(|s| !s.is_empty())
                     .collect();
                 let seed_refs: Vec<&[u8]> = seed_strings.iter().map(|s| s.as_bytes()).collect();
-                show_spinner(self.spinner_msg(), derive_pda(&program_id, &seed_refs)).await;
+                let (pda, bump) = Pubkey::find_program_address(&seed_refs, &program_id);
+                println!(
+                    "{} {}\n{} {}",
+                    style("PDA:").green().bold(),
+                    style(pda).cyan(),
+                    style("Bump:").green().bold(),
+                    style(bump).cyan()
+                );
             }
             AddressCommand::GoBack => {
                 return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
@@ -73,26 +76,3 @@ impl Command for AddressCommand {
     }
 }
 
-async fn resolve_address(path: &Path) -> anyhow::Result<()> {
-    let keypair = read_keypair_from_path(path)?;
-    println!(
-        "{} {}\n{} {}",
-        style("Keypair path:").green().bold(),
-        style(path.display()).cyan(),
-        style("Address:").green().bold(),
-        style(keypair.pubkey()).cyan()
-    );
-    Ok(())
-}
-
-async fn derive_pda(program_id: &Pubkey, seeds: &[&[u8]]) -> anyhow::Result<()> {
-    let (pda, bump) = Pubkey::find_program_address(seeds, program_id);
-    println!(
-        "{} {}\n{} {}",
-        style("PDA:").green().bold(),
-        style(pda).cyan(),
-        style("Bump:").green().bold(),
-        style(bump).cyan()
-    );
-    Ok(())
-}
