@@ -49,6 +49,7 @@ solana-signature.workspace = true
 solana-nonce.workspace = true
 solana-transaction-status.workspace = true
 solana-system-interface.workspace = true
+solana-loader-v3-interface = { version = "6.1.0", features = ["bincode"] }
 solana-account-decoder.workspace = true
 
 [dev-dependencies]
