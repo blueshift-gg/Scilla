@@ -14,7 +14,11 @@ use {
         EncodedTransaction, EncodedTransactionWithStatusMeta, TransactionBinaryEncoding,
         UiTransactionEncoding,
     },
-    std::{path::Path, str::FromStr},
+    std::{
+        path::Path,
+        process::{Command, Stdio},
+        str::FromStr,
+    },
     tokio::try_join,
 };
 
@@ -198,6 +202,26 @@ pub fn short_pubkey(pk: &Pubkey) -> String {
     let prefix = &s[..4];
     let suffix = &s[s.len() - 3..];
     format!("{prefix}...{suffix}")
+}
+
+pub fn has_command_version(command: &str) -> anyhow::Result<bool> {
+    let status = Command::new(command)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|err| anyhow!("Failed to run {command}: {err}"))?;
+    Ok(status.success())
+}
+
+pub fn command_exists(command: &str) -> bool {
+    Command::new("which")
+        .arg(command)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 pub fn decode_and_deserialize_transaction(
