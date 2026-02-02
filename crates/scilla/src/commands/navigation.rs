@@ -3,9 +3,9 @@ use {
         commands::{Command, CommandFlow, program::ProgramCommand},
         context::ScillaContext,
         prompt::{
-            prompt_account_section, prompt_cluster_section, prompt_config_section,
-            prompt_main_section, prompt_program_section, prompt_stake_section,
-            prompt_transaction_section, prompt_vote_section,
+            prompt_account_section, prompt_address_section, prompt_cluster_section,
+            prompt_config_section, prompt_main_section, prompt_program_section,
+            prompt_stake_section, prompt_transaction_section, prompt_vote_section,
         },
     },
     std::fmt::{self, Display},
@@ -31,6 +31,7 @@ pub enum NavigationSection {
     ProgramLegacy,
     ProgramV4,
 
+    Address,
     Stake,
     Vote,
     Transaction,
@@ -44,6 +45,7 @@ impl Display for NavigationSection {
             NavigationSection::Main => "Main",
             NavigationSection::Account => "Account",
             NavigationSection::Cluster => "Cluster",
+            NavigationSection::Address => "Address",
             NavigationSection::Program => "Program",
             NavigationSection::ProgramLegacy => "ProgramLegacy",
             NavigationSection::ProgramV4 => "ProgramV4",
@@ -76,6 +78,11 @@ impl NavigationSection {
 
             NavigationSection::Cluster => {
                 let cmd = prompt_cluster_section()?;
+                cmd.process_command(ctx).await
+            }
+
+            NavigationSection::Address => {
+                let cmd = prompt_address_section()?;
                 cmd.process_command(ctx).await
             }
 
