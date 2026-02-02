@@ -39,7 +39,7 @@ impl Command for AddressCommand {
             .checked_push(NavigationSection::Address);
         match self {
             AddressCommand::Address => {
-                let path = prompt_keypair_path("Enter keypair path:", ctx);
+                let path = prompt_keypair_path("Enter keypair path (leave empty for default):", ctx);
                 let keypair = read_keypair_from_path(&path)?;
                 println!(
                     "{} {}\n{} {}",
