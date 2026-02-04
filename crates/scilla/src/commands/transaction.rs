@@ -9,6 +9,7 @@ use {
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
+    inquire::Confirm,
     ptree::{TreeBuilder, print_tree},
     solana_account_decoder::UiAccount,
     solana_rpc_client_api::config::RpcTransactionConfig,
@@ -75,15 +76,14 @@ impl Command for TransactionCommand {
             }
             TransactionCommand::FetchTransaction => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
-                let parse_instructions = inquire::Confirm::new(
-                    "Do you want to parse instructions for this transaction?",
-                )
-                .with_default(true)
-                .prompt()
-                .unwrap_or(true);
+                let parse_instructions =
+                    Confirm::new("Do you want to parse instructions for this transaction?")
+                        .with_default(true)
+                        .prompt()
+                        .unwrap_or(true);
                 show_spinner(
                     self.spinner_msg(),
-                    process_fetch_transaction(ctx, &signature, &parse_instructions),
+                    process_fetch_transaction(ctx, &signature, parse_instructions),
                 )
                 .await;
             }
@@ -234,7 +234,7 @@ async fn fetch_transaction_status(
 async fn process_fetch_transaction(
     ctx: &ScillaContext,
     signature: &Signature,
-    parse_instructions: &bool,
+    parse_instructions: bool,
 ) -> anyhow::Result<()> {
     let tx = ctx
         .rpc()
@@ -332,8 +332,8 @@ async fn process_fetch_transaction(
                 println!("{accounts_table}");
             }
 
-            if *parse_instructions {
-                process_parse_instructions(parsed_msg).await?;
+            if parse_instructions {
+                process_parse_instructions(parsed_msg)?;
             }
         }
         UiMessage::Raw(raw_msg) => {
@@ -604,7 +604,7 @@ async fn simulate_transaction(
     Ok(())
 }
 
-async fn process_parse_instructions(
+fn process_parse_instructions(
     parsed_msg: &solana_transaction_status::UiParsedMessage,
 ) -> anyhow::Result<()> {
     if parsed_msg.instructions.is_empty() {
@@ -707,7 +707,7 @@ fn display_system_instruction(
             }
             "createAccount" => {
                 if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
-                    tree.add_empty_child(format!("{}: {}", "Funder", style(source).cyan()));
+                    tree.add_empty_child(format!("{}: {}", "Source", style(source).cyan()));
                 }
                 if let Some(new_account) = info_map.get("newAccount").and_then(|v| v.as_str()) {
                     tree.add_empty_child(format!(
@@ -940,7 +940,7 @@ fn display_ata_instruction(
             };
 
             let label = match key.as_str() {
-                "source" => "Funder",
+                "source" => "Source",
                 "account" => "ATA",
                 "wallet" => "Owner",
                 "mint" => "Mint",
