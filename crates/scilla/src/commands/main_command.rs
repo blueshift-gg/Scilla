@@ -8,7 +8,6 @@ use {
             prompt_vote_section,
         },
     },
-    anyhow::Ok,
     std::fmt,
 };
 

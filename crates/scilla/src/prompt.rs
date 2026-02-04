@@ -7,7 +7,7 @@ use {
             config::ConfigCommand,
             main_command::MainCommand,
             navigation::NavigationTarget,
-            program::{ProgramCommand, ProgramShared},
+            program::{ProgramCommand, ProgramShared, build::BuildMode},
             stake::StakeCommand,
             transaction::TransactionCommand,
             vote::VoteCommand,
@@ -331,4 +331,10 @@ pub fn prompt_encoding_options() -> UiTransactionEncoding {
             UiTransactionEncoding::JsonParsed,
         ],
     )
+}
+
+pub fn prompt_build_mode() -> anyhow::Result<BuildMode> {
+    let options = vec![BuildMode::Upstream, BuildMode::Solana];
+    let selection = Select::new("Select build mode:", options).prompt()?;
+    Ok(selection)
 }
