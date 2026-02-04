@@ -1,6 +1,7 @@
 use {
     crate::{
         commands::{Command, CommandFlow, NavigationTarget, navigation::NavigationSection},
+        constants::COMPUTE_BUDGET_PROGRAM_ID,
         context::ScillaContext,
         misc::helpers::decode_and_deserialize_transaction,
         prompt::{prompt_confirmation, prompt_encoding_options, prompt_input_data},
@@ -8,11 +9,14 @@ use {
     },
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
+    inquire::Confirm,
+    ptree::{TreeBuilder, print_tree},
     solana_account_decoder::UiAccount,
     solana_rpc_client_api::config::{RpcSimulateTransactionConfig, RpcTransactionConfig},
     solana_signature::Signature,
     solana_transaction_status::{
-        EncodedTransaction, UiInnerInstructions, UiMessage, UiTransactionEncoding,
+        EncodedTransaction, UiInnerInstructions, UiInstruction, UiMessage, UiParsedInstruction,
+        UiTransactionEncoding,
     },
     std::fmt,
 };
@@ -72,7 +76,16 @@ impl Command for TransactionCommand {
             }
             TransactionCommand::FetchTransaction => {
                 let signature: Signature = prompt_input_data("Enter transaction signature:");
-                show_spinner(self.spinner_msg(), fetch_transaction(ctx, &signature)).await;
+                let parse_instructions =
+                    Confirm::new("Do you want to parse instructions for this transaction?")
+                        .with_default(true)
+                        .prompt()
+                        .unwrap_or(true);
+                show_spinner(
+                    self.spinner_msg(),
+                    process_fetch_transaction(ctx, &signature, parse_instructions),
+                )
+                .await;
             }
             TransactionCommand::SendTransaction => {
                 println!(
@@ -222,7 +235,11 @@ async fn fetch_transaction_status(
     Ok(())
 }
 
-async fn fetch_transaction(ctx: &ScillaContext, signature: &Signature) -> anyhow::Result<()> {
+async fn process_fetch_transaction(
+    ctx: &ScillaContext,
+    signature: &Signature,
+    parse_instructions: bool,
+) -> anyhow::Result<()> {
     let tx = ctx
         .rpc()
         .get_transaction_with_config(
@@ -317,6 +334,10 @@ async fn fetch_transaction(ctx: &ScillaContext, signature: &Signature) -> anyhow
                     ]);
                 }
                 println!("{accounts_table}");
+            }
+
+            if parse_instructions {
+                process_parse_instructions(parsed_msg)?;
             }
         }
         UiMessage::Raw(raw_msg) => {
@@ -610,6 +631,476 @@ async fn simulate_transaction(
         addr_table.add_row(vec![Cell::new(writable), Cell::new(readonly)]);
         println!("{addr_table}");
     }
+
+    Ok(())
+}
+
+fn process_parse_instructions(
+    parsed_msg: &solana_transaction_status::UiParsedMessage,
+) -> anyhow::Result<()> {
+    if parsed_msg.instructions.is_empty() {
+        println!("{}", style("No instructions found in transaction").yellow());
+        return Ok(());
+    }
+
+    println!("\n{}", style("PARSED INSTRUCTIONS").green().bold());
+
+    // Display each instruction
+    for (idx, ui_instruction) in parsed_msg.instructions.iter().enumerate() {
+        display_instruction(idx + 1, ui_instruction)?;
+    }
+
+    Ok(())
+}
+
+fn display_instruction(idx: usize, ui_instruction: &UiInstruction) -> anyhow::Result<()> {
+    let mut tree = TreeBuilder::new(format!("Instruction {}", idx));
+
+    match ui_instruction {
+        UiInstruction::Parsed(ui_parsed_ix) => match ui_parsed_ix {
+            UiParsedInstruction::Parsed(parsed_ix) => {
+                display_parsed_instruction(&mut tree, parsed_ix)?;
+            }
+            UiParsedInstruction::PartiallyDecoded(partial_ix) => {
+                display_partially_decoded_instruction(&mut tree, partial_ix)?;
+            }
+        },
+        UiInstruction::Compiled(compiled_ix) => {
+            display_compiled_instruction(&mut tree, compiled_ix)?;
+        }
+    }
+
+    print_tree(&tree.build())?;
+    println!(); // Add spacing between instructions
+    Ok(())
+}
+
+fn display_parsed_instruction(
+    tree: &mut TreeBuilder,
+    parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    tree.add_empty_child(format!("Program: {}", style(&parsed_ix.program).yellow()));
+
+    if parsed_ix.program == "spl-memo"
+        && let Value::String(memo) = &parsed_ix.parsed
+    {
+        return display_memo_instruction(tree, Some(&Value::String(memo.clone())));
+    }
+
+    let Value::Object(parsed_map) = &parsed_ix.parsed else {
+        return display_generic_parsed(tree, parsed_ix);
+    };
+
+    let ix_type = parsed_map
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    tree.add_empty_child(format!("Type: {}", style(ix_type).green()));
+
+    match parsed_ix.program.as_str() {
+        "system" => display_system_instruction(tree, ix_type, parsed_map.get("info"))?,
+        "spl-token" | "spl-token-2022" => {
+            display_token_instruction(tree, ix_type, parsed_map.get("info"))?
+        }
+        "spl-associated-token-account" => display_ata_instruction(tree, parsed_map.get("info"))?,
+        _ => display_generic_parsed(tree, parsed_ix)?,
+    }
+
+    Ok(())
+}
+
+fn display_system_instruction(
+    tree: &mut TreeBuilder,
+    ix_type: &str,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    if let Some(Value::Object(info_map)) = info {
+        match ix_type {
+            "transfer" => {
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "From", style(source).cyan()));
+                }
+                if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "To", style(destination).cyan()));
+                }
+                if let Some(lamports) = info_map.get("lamports").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!(
+                        "Amount: {} lamports ({} SOL)",
+                        lamports,
+                        crate::misc::helpers::lamports_to_sol(lamports)
+                    ));
+                }
+            }
+            "createAccount" => {
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Source", style(source).cyan()));
+                }
+                if let Some(new_account) = info_map.get("newAccount").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!(
+                        "{}: {}",
+                        "New Account",
+                        style(new_account).cyan()
+                    ));
+                }
+                if let Some(lamports) = info_map.get("lamports").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Lamports: {}", lamports));
+                }
+                if let Some(space) = info_map.get("space").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Space: {} bytes", space));
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Owner: {}", owner));
+                }
+            }
+            "assign" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Account: {}", account));
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Owner: {}", owner));
+                }
+            }
+            "allocate" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Account: {}", account));
+                }
+                if let Some(space) = info_map.get("space").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Space: {} bytes", space));
+                }
+            }
+            _ => {
+                // Generic display
+                for (key, value) in info_map {
+                    if let Some(s) = value.as_str() {
+                        tree.add_empty_child(format!("{}: {}", key, s));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn display_token_instruction(
+    tree: &mut TreeBuilder,
+    ix_type: &str,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    if let Some(Value::Object(info_map)) = info {
+        match ix_type {
+            "transfer" | "transferChecked" => {
+                if let Some(source) = info_map.get("source").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", style("From"), style(source).cyan()));
+                }
+                if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", style("To"), style(destination).cyan()));
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Mint", style(mint).cyan()));
+                }
+
+                // Amount
+                if let Some(token_amount) = info_map.get("tokenAmount") {
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        tree.add_empty_child(format!(
+                            "Amount: {} (decimals: {})",
+                            ui_amount_str, decimals
+                        ));
+                    }
+                } else if let Some(amount_val) = info_map.get("amount") {
+                    let amount = if let Some(s) = amount_val.as_str() {
+                        s.to_string()
+                    } else if let Some(n) = amount_val.as_u64() {
+                        n.to_string()
+                    } else {
+                        amount_val.to_string()
+                    };
+                    tree.add_empty_child(format!("Amount: {}", amount));
+                }
+            }
+            "mintTo" | "mintToChecked" => {
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Mint", style(mint).cyan()));
+                }
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "To", style(account).cyan()));
+                }
+
+                // Amount
+                if let Some(token_amount) = info_map.get("tokenAmount") {
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        tree.add_empty_child(format!(
+                            "Amount: {} (decimals: {})",
+                            ui_amount_str, decimals
+                        ));
+                    }
+                } else if let Some(amount_val) = info_map.get("amount") {
+                    let amount = if let Some(s) = amount_val.as_str() {
+                        s.to_string()
+                    } else if let Some(n) = amount_val.as_u64() {
+                        n.to_string()
+                    } else {
+                        amount_val.to_string()
+                    };
+                    tree.add_empty_child(format!("Amount: {}", amount));
+                }
+            }
+            "burn" | "burnChecked" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Burn From", style(account).cyan()));
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("{}: {}", "Mint", style(mint).cyan()));
+                }
+
+                // Amount
+                if let Some(token_amount) = info_map.get("tokenAmount") {
+                    if let Some(ui_amount_str) =
+                        token_amount.get("uiAmountString").and_then(|v| v.as_str())
+                    {
+                        let decimals = token_amount
+                            .get("decimals")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        tree.add_empty_child(format!(
+                            "Amount: {} (decimals: {})",
+                            ui_amount_str, decimals
+                        ));
+                    }
+                } else if let Some(amount_val) = info_map.get("amount") {
+                    let amount = if let Some(s) = amount_val.as_str() {
+                        s.to_string()
+                    } else if let Some(n) = amount_val.as_u64() {
+                        n.to_string()
+                    } else {
+                        amount_val.to_string()
+                    };
+                    tree.add_empty_child(format!("Amount: {}", amount));
+                }
+            }
+            "initializeMint" | "initializeMint2" => {
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Mint: {}", style(mint).cyan()));
+                }
+                if let Some(decimals) = info_map.get("decimals").and_then(|v| v.as_u64()) {
+                    tree.add_empty_child(format!("Decimals: {}", decimals));
+                }
+                if let Some(mint_authority) = info_map.get("mintAuthority").and_then(|v| v.as_str())
+                {
+                    tree.add_empty_child(format!("Mint Authority: {}", mint_authority));
+                }
+                if let Some(freeze_authority) =
+                    info_map.get("freezeAuthority").and_then(|v| v.as_str())
+                {
+                    tree.add_empty_child(format!("Freeze Authority: {}", freeze_authority));
+                }
+            }
+            "initializeAccount" | "initializeAccount2" | "initializeAccount3" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Account: {}", account));
+                }
+                if let Some(mint) = info_map.get("mint").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Mint: {}", mint));
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Owner: {}", owner));
+                }
+            }
+            "closeAccount" => {
+                if let Some(account) = info_map.get("account").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Account: {}", account));
+                }
+                if let Some(destination) = info_map.get("destination").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Destination: {}", destination));
+                }
+                if let Some(owner) = info_map.get("owner").and_then(|v| v.as_str()) {
+                    tree.add_empty_child(format!("Owner: {}", owner));
+                }
+            }
+            _ => {
+                // Generic display
+                for (key, value) in info_map {
+                    let display_value = match value {
+                        Value::String(s) => s.clone(),
+                        _ => value.to_string().trim_matches('"').to_string(),
+                    };
+                    tree.add_empty_child(format!("{}: {}", key, display_value));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn display_ata_instruction(
+    tree: &mut TreeBuilder,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    if let Some(Value::Object(info_map)) = info {
+        for (key, value) in info_map {
+            if key == "systemProgram" || key == "tokenProgram" {
+                continue;
+            }
+
+            let display_value = match value {
+                Value::String(s) => s.clone(),
+                _ => value.to_string().trim_matches('"').to_string(),
+            };
+
+            let label = match key.as_str() {
+                "source" => "Source",
+                "account" => "ATA",
+                "wallet" => "Owner",
+                "mint" => "Mint",
+                _ => key,
+            };
+
+            tree.add_empty_child(format!("{}: {}", label, style(&display_value).cyan()));
+        }
+    }
+
+    Ok(())
+}
+
+fn display_memo_instruction(
+    tree: &mut TreeBuilder,
+    info: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    use serde_json::Value;
+
+    if let Some(Value::String(memo)) = info {
+        tree.add_empty_child(format!("Memo: {}", memo));
+    }
+
+    Ok(())
+}
+
+fn display_generic_parsed(
+    tree: &mut TreeBuilder,
+    parsed_ix: &solana_transaction_status::parse_instruction::ParsedInstruction,
+) -> anyhow::Result<()> {
+    tree.add_empty_child(format!("Program ID: {}", &parsed_ix.program_id));
+    tree.add_empty_child(format!(
+        "Parsed Data: {}",
+        serde_json::to_string_pretty(&parsed_ix.parsed)?
+    ));
+
+    Ok(())
+}
+
+fn display_partially_decoded_instruction(
+    tree: &mut TreeBuilder,
+    partial_ix: &solana_transaction_status::UiPartiallyDecodedInstruction,
+) -> anyhow::Result<()> {
+    // Check if this is a Compute Budget instruction
+    if partial_ix.program_id == COMPUTE_BUDGET_PROGRAM_ID {
+        tree.add_empty_child(format!("Program: {}", style("Compute Budget").yellow()));
+        display_compute_budget_instruction(tree, &partial_ix.data)?;
+        return Ok(());
+    }
+
+    // Unknown program
+    tree.add_empty_child(format!(
+        "Program: {} {}",
+        style("Unknown").red(),
+        &partial_ix.program_id
+    ));
+    tree.add_empty_child(format!("Accounts: {}", partial_ix.accounts.len()));
+    tree.add_empty_child(format!("Data: {}", partial_ix.data));
+
+    Ok(())
+}
+
+fn display_compute_budget_instruction(
+    tree: &mut TreeBuilder,
+    data_base58: &str,
+) -> anyhow::Result<()> {
+    let data = bs58::decode(data_base58).into_vec()?;
+
+    if data.is_empty() {
+        return Ok(());
+    }
+
+    match data[0] {
+        0 => {
+            if data.len() >= 5 {
+                let bytes = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+                tree.add_empty_child(format!("Type: {}", style("Request Heap Frame").green()));
+                tree.add_empty_child(format!("Heap Frame Size: {} bytes", bytes));
+            }
+        }
+        1 => {
+            if data.len() >= 5 {
+                let units = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+                tree.add_empty_child(format!("Type: {}", style("Set Compute Unit Limit").green()));
+                tree.add_empty_child(format!("Compute Units: {}", units));
+            }
+        }
+        2 => {
+            let micro_lamports = if data.len() >= 9 {
+                u64::from_le_bytes([
+                    data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
+                ])
+            } else if data.len() >= 5 {
+                u64::from_le_bytes([data[1], data[2], data[3], data[4], 0, 0, 0, 0])
+            } else {
+                0
+            };
+            tree.add_empty_child(format!("Type: {}", style("Set Compute Unit Price").green()));
+            tree.add_empty_child(format!(
+                "Priority Fee: {} micro-lamports/CU",
+                micro_lamports
+            ));
+        }
+        3 => {
+            if data.len() >= 5 {
+                let bytes = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+                tree.add_empty_child(format!(
+                    "Type: {}",
+                    style("Set Loaded Accounts Data Size Limit").green()
+                ));
+                tree.add_empty_child(format!("Size Limit: {} bytes", bytes));
+            }
+        }
+        _ => {
+            tree.add_empty_child(format!("Unknown instruction type: {}", data[0]));
+        }
+    }
+
+    Ok(())
+}
+
+fn display_compiled_instruction(
+    tree: &mut TreeBuilder,
+    compiled_ix: &solana_transaction_status::UiCompiledInstruction,
+) -> anyhow::Result<()> {
+    tree.add_empty_child(format!("Type: {}", "Compiled"));
+    tree.add_empty_child(format!("Program Index: {}", compiled_ix.program_id_index));
+    tree.add_empty_child(format!("Accounts: {}", compiled_ix.accounts.len()));
+    tree.add_empty_child(format!("Data: {}", compiled_ix.data));
 
     Ok(())
 }
