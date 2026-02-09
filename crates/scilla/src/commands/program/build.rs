@@ -1,8 +1,7 @@
 use {
     crate::{
         commands::CommandFlow,
-        context::ScillaContext,
-        misc::helpers::{command_exists, has_command_version},
+        misc::helpers::command_exists,
         prompt::{prompt_build_mode, prompt_input_data, prompt_select_data},
         ui::show_spinner,
     },
@@ -32,7 +31,7 @@ rustflags = [
 build-bpf = "build --release --target bpfel-unknown-none"
 "#;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuildMode {
     Upstream,
     Solana,
@@ -48,48 +47,6 @@ impl fmt::Display for BuildMode {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-struct BuildPlan {
-    mode: BuildMode,
-    command: &'static str,
-    use_nightly: bool,
-    include_sbpf_config: bool,
-    include_profiles: bool,
-    include_cdylib: bool,
-    prefer_program_dir: bool,
-    needs_llvm: bool,
-    needs_sbpf_linker: bool,
-}
-
-impl BuildPlan {
-    fn from_build_mode(mode: BuildMode) -> Self {
-        match mode {
-            BuildMode::Upstream => Self {
-                mode,
-                command: "build-bpf",
-                use_nightly: true,
-                include_sbpf_config: true,
-                include_profiles: true,
-                include_cdylib: true,
-                prefer_program_dir: true,
-                needs_llvm: true,
-                needs_sbpf_linker: true,
-            },
-            BuildMode::Solana => Self {
-                mode,
-                command: "build-sbf",
-                use_nightly: false,
-                include_sbpf_config: false,
-                include_profiles: false,
-                include_cdylib: false,
-                prefer_program_dir: false,
-                needs_llvm: false,
-                needs_sbpf_linker: false,
-            },
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 struct BuildContext {
     program_dir: PathBuf,
@@ -99,7 +56,7 @@ struct BuildContext {
 
 /// Parsed Cargo.toml manifest.
 struct Manifest {
-    table: Table,
+    table: toml::Table,
 }
 
 impl Manifest {
@@ -110,7 +67,7 @@ impl Manifest {
         Ok(Self { table })
     }
 
-    fn try_from_dir(dir: &Path) -> Option<Self> {
+    fn try_from_program_dir(dir: &Path) -> Option<Self> {
         let path = dir.join("Cargo.toml");
         if !path.is_file() {
             return None;
@@ -146,7 +103,7 @@ impl Manifest {
     }
 }
 
-pub async fn process_build(_ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+pub async fn process_build() -> anyhow::Result<CommandFlow> {
     println!(
         "{}",
         style("This command will expand configs and build the program for sbpf target")
@@ -155,83 +112,176 @@ pub async fn process_build(_ctx: &mut ScillaContext) -> anyhow::Result<CommandFl
     );
     let program_dir = resolve_program_dir()?;
     let build_mode = prompt_build_mode()?;
-    let plan = BuildPlan::from_build_mode(build_mode);
-    let build_context = prepare_build(program_dir, plan)?;
-    show_spinner(
-        "Building program for sbpf target...",
-        run_build(build_context, plan),
-    )
-    .await;
+
+    let build_context = resolve_build_context(&program_dir)?;
+
+    if build_mode == BuildMode::Upstream {
+        prepare_upstream_build(&build_context)?;
+        show_spinner(
+            "Building program for sbpf target...",
+            run_upstream_build(&build_context),
+        )
+        .await;
+        print_build_output(&build_context, build_mode);
+    }
+
+    if build_mode == BuildMode::Solana {
+        show_spinner(
+            "Building program for sbpf target...",
+            run_normal_build(&build_context),
+        )
+        .await;
+    }
+
     Ok(CommandFlow::Processed)
+}
+
+fn prepare_upstream_build(build_context: &BuildContext) -> anyhow::Result<&BuildContext> {
+    ensure_sbpf_linker()?;
+    ensure_llvm()?;
+    expand_repo_config(build_context)?;
+    Ok(build_context)
+}
+
+fn resolve_build_context(program_dir: &Path) -> anyhow::Result<BuildContext> {
+    let manifest_path = program_dir.join("Cargo.toml");
+    let manifest = Manifest::from_path(&manifest_path)?;
+    let mut is_workspace = false;
+    let mut is_package = false;
+
+    if manifest.has_section("workspace") {
+        is_workspace = true;
+    }
+    if manifest.has_section("package") {
+        is_package = true;
+    }
+
+    if is_package {
+        resolve_package_build_context(program_dir, &manifest)
+    } else if is_workspace {
+        resolve_workspace_build_context(program_dir)
+    } else {
+        Err(anyhow!(
+            "Cargo.toml is missing [workspace] or [package] section"
+        ))
+    }
+}
+
+fn resolve_workspace_build_context(workspace_root: &Path) -> anyhow::Result<BuildContext> {
+    let (program_dir, package_name) = prompt_workspace_member(workspace_root)?;
+    Ok(BuildContext {
+        program_dir,
+        workspace_root: Some(workspace_root.to_path_buf()),
+        package_name,
+    })
+}
+
+fn resolve_package_build_context(
+    program_dir: &Path,
+    manifest: &Manifest,
+) -> anyhow::Result<BuildContext> {
+    let package_name = manifest.package_name().ok_or_else(|| {
+        anyhow!(
+            "Failed to read package name from {}",
+            program_dir.join("Cargo.toml").display()
+        )
+    })?;
+    let workspace_root = find_workspace_root(program_dir)?;
+
+    Ok(BuildContext {
+        program_dir: program_dir.to_path_buf(),
+        workspace_root,
+        package_name,
+    })
+}
+
+async fn run_upstream_build(build_context: &BuildContext) -> anyhow::Result<()> {
+    let mut command = ProcessCommand::new("cargo");
+    command.arg("+nightly");
+    command.arg("build-bpf");
+
+    if let Some(workspace_root) = &build_context.workspace_root {
+        command.args(["-p", &build_context.package_name]);
+        command.current_dir(workspace_root);
+    } else {
+        command.current_dir(&build_context.program_dir);
+    }
+
+    let output = command
+        .output()
+        .map_err(|err| anyhow!("Failed to run cargo +nightly build-bpf: {err}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(anyhow!(
+            "cargo +nightly build-bpf failed. stdout: {stdout}\nstderr: {stderr}",
+        ));
+    }
+
+    Ok(())
+}
+
+async fn run_normal_build(build_context: &BuildContext) -> anyhow::Result<()> {
+    ensure_cargo_sbf()?;
+    let mut command = ProcessCommand::new("cargo");
+    command.arg("build-sbf");
+
+    if let Some(workspace_root) = &build_context.workspace_root {
+        command.args(["--", "-p", &build_context.package_name]);
+        command.current_dir(workspace_root);
+    } else {
+        command.current_dir(&build_context.program_dir);
+    }
+
+    let output = command
+        .output()
+        .map_err(|err| anyhow!("Failed to run cargo build-sbf: {err}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(anyhow!(
+            "cargo build-sbf failed. stdout: {stdout}\nstderr: {stderr}",
+        ));
+    }
+
+    Ok(())
+}
+
+fn print_build_output(build_context: &BuildContext, build_mode: BuildMode) {
+    let build_root = build_context
+        .workspace_root
+        .as_deref()
+        .unwrap_or(&build_context.program_dir);
+    let lib_name = build_context.package_name.replace('-', "_");
+    let package_name = &build_context.package_name;
+    let target_dir = build_root.join("target");
+
+    let primary_output = match build_mode {
+        BuildMode::Upstream => target_dir
+            .join("bpfel-unknown-none/release")
+            .join(format!("lib{lib_name}.so")),
+        BuildMode::Solana => target_dir.join("deploy").join(format!("{package_name}.so")),
+    };
+
+    let display_path = relative_display_path(build_root, &primary_output);
+    println!("{} {}", style("Build output:").green().bold(), display_path);
 }
 
 fn resolve_program_dir() -> anyhow::Result<PathBuf> {
     let current_dir = env::current_dir()?;
-    if is_program_dir(&current_dir) || is_workspace_dir(&current_dir) {
+    if is_package_dir(&current_dir) || is_workspace_dir(&current_dir) {
         return Ok(current_dir);
     }
 
     let program_dir: PathBuf =
         prompt_input_data("Enter the path to the program directory to build for sbpf target:");
-    if !is_program_dir(&program_dir) && !is_workspace_dir(&program_dir) {
+    if !is_package_dir(&program_dir) && !is_workspace_dir(&program_dir) {
         return Err(anyhow!("No Cargo.toml found in {}", program_dir.display()));
     }
 
     Ok(program_dir)
-}
-
-fn is_program_dir(path: &Path) -> bool {
-    Manifest::try_from_dir(path).is_some_and(|m| m.has_section("package"))
-}
-
-fn is_workspace_dir(path: &Path) -> bool {
-    Manifest::try_from_dir(path).is_some_and(|m| m.has_section("workspace"))
-}
-
-fn prepare_build(program_dir: PathBuf, plan: BuildPlan) -> anyhow::Result<BuildContext> {
-    let build_context = resolve_build_context(&program_dir)?;
-    if plan.needs_sbpf_linker {
-        ensure_sbpf_linker()?;
-    }
-    if plan.needs_llvm {
-        ensure_llvm()?;
-    }
-    expand_repo_config(&build_context, plan)?;
-    Ok(build_context)
-}
-
-async fn run_build(build_context: BuildContext, plan: BuildPlan) -> anyhow::Result<()> {
-    run_cargo_build(&build_context, plan)?;
-    print_build_output(&build_context, plan.mode);
-    Ok(())
-}
-
-fn resolve_build_context(program_dir: &Path) -> anyhow::Result<BuildContext> {
-    let workspace_root = find_workspace_root(program_dir)?;
-    let manifest = Manifest::from_path(&program_dir.join("Cargo.toml"))?;
-    let mut resolved_program_dir = program_dir.to_path_buf();
-    let mut package_name = manifest.package_name();
-
-    if let (Some(workspace_root), None) = (workspace_root.as_ref(), package_name.as_ref())
-        && program_dir == workspace_root
-    {
-        let (member_dir, member_name) = prompt_workspace_member(workspace_root)?;
-        resolved_program_dir = member_dir;
-        package_name = Some(member_name);
-    }
-
-    let package_name = package_name.ok_or_else(|| {
-        anyhow!(
-            "Failed to read package name from {}",
-            resolved_program_dir.join("Cargo.toml").display()
-        )
-    })?;
-
-    Ok(BuildContext {
-        program_dir: resolved_program_dir,
-        workspace_root,
-        package_name,
-    })
 }
 
 fn find_workspace_root(program_dir: &Path) -> anyhow::Result<Option<PathBuf>> {
@@ -249,22 +299,9 @@ fn find_workspace_root(program_dir: &Path) -> anyhow::Result<Option<PathBuf>> {
     Ok(None)
 }
 
-fn read_package_name(program_dir: &Path) -> anyhow::Result<String> {
-    let manifest_path = program_dir.join("Cargo.toml");
-    Manifest::from_path(&manifest_path)?
-        .package_name()
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to read package name from {}",
-                manifest_path.display()
-            )
-        })
-}
-
 fn prompt_workspace_member(workspace_root: &Path) -> anyhow::Result<(PathBuf, String)> {
     let manifest = Manifest::from_path(&workspace_root.join("Cargo.toml"))?;
     let members = manifest.workspace_members();
-
     let candidate_dir = if members.is_empty() {
         let member_path: PathBuf = prompt_input_data(
             "Workspace detected. Enter the relative path to the package to build:",
@@ -288,51 +325,26 @@ fn prompt_workspace_member(workspace_root: &Path) -> anyhow::Result<(PathBuf, St
     Ok((candidate_dir, package_name))
 }
 
-fn ensure_sbpf_linker() -> anyhow::Result<()> {
-    if has_command_version("sbpf-linker")? {
-        return Ok(());
-    }
-
-    Err(anyhow!(
-        "sbpf-linker is required. Install it with: cargo install sbpf-linker"
-    ))
+fn read_package_name(program_dir: &Path) -> anyhow::Result<String> {
+    let manifest_path = program_dir.join("Cargo.toml");
+    Manifest::from_path(&manifest_path)?
+        .package_name()
+        .ok_or_else(|| {
+            anyhow!(
+                "Failed to read package name from {}",
+                manifest_path.display()
+            )
+        })
 }
 
-fn ensure_llvm() -> anyhow::Result<()> {
-    if has_command_version("llvm-config")? {
-        return Ok(());
-    }
-
-    Err(anyhow!(
-        "LLVM is required. Install it manually and ensure llvm-config is on PATH."
-    ))
-}
-
-fn ensure_cargo_sbf() -> anyhow::Result<()> {
-    if has_command_version("cargo-build-sbf")? && command_exists("cargo-build-sbf") {
-        return Ok(());
-    }
-
-    Err(anyhow!(
-        "cargo build-sbf is required. Install solana-cargo-build-sbf and ensure cargo-build-sbf \
-         is on PATH."
-    ))
-}
-
-fn expand_repo_config(build_context: &BuildContext, plan: BuildPlan) -> anyhow::Result<()> {
-    if plan.include_sbpf_config {
-        ensure_cargo_config(&build_context.program_dir)?;
-    }
-    if plan.include_cdylib {
-        ensure_program_manifest(&build_context.program_dir)?;
-    }
-    if plan.include_profiles {
-        let manifest_root = build_context
-            .workspace_root
-            .as_deref()
-            .unwrap_or(&build_context.program_dir);
-        ensure_workspace_manifest(manifest_root)?;
-    }
+fn expand_repo_config(build_context: &BuildContext) -> anyhow::Result<()> {
+    ensure_cargo_config(&build_context.program_dir)?;
+    ensure_program_manifest(&build_context.program_dir)?;
+    let manifest_root = build_context
+        .workspace_root
+        .as_deref()
+        .unwrap_or(&build_context.program_dir);
+    ensure_workspace_manifest(manifest_root)?;
     Ok(())
 }
 
@@ -341,21 +353,6 @@ fn ensure_cargo_config(config_root: &Path) -> anyhow::Result<()> {
     let config_path = config_dir.join("config.toml");
     fs::create_dir_all(&config_dir)?;
     fs::write(&config_path, SBPF_BUILD_CONFIG_TOML)?;
-    Ok(())
-}
-
-fn update_manifest<F>(manifest_path: &Path, modifier: F) -> anyhow::Result<()>
-where
-    F: FnOnce(&mut Vec<String>),
-{
-    let contents = fs::read_to_string(manifest_path)?;
-    let mut lines: Vec<String> = contents.lines().map(String::from).collect();
-    modifier(&mut lines);
-    let mut output = lines.join("\n");
-    if contents.ends_with('\n') {
-        output.push('\n');
-    }
-    fs::write(manifest_path, output)?;
     Ok(())
 }
 
@@ -384,6 +381,21 @@ fn ensure_workspace_manifest(workspace_root: &Path) -> anyhow::Result<()> {
             &["opt-level = 3", "incremental = false", "codegen-units = 1"],
         );
     })
+}
+
+fn update_manifest<F>(manifest_path: &Path, modifier: F) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut Vec<String>),
+{
+    let contents = fs::read_to_string(manifest_path)?;
+    let mut lines: Vec<String> = contents.lines().map(String::from).collect();
+    modifier(&mut lines);
+    let mut output = lines.join("\n");
+    if contents.ends_with('\n') {
+        output.push('\n');
+    }
+    fs::write(manifest_path, output)?;
+    Ok(())
 }
 
 fn ensure_section_entries(lines: &mut Vec<String>, header: &str, entries: &[&str]) {
@@ -437,65 +449,43 @@ fn section_has_key(lines: &[String], start: usize, end: usize, key: &str) -> boo
     })
 }
 
-fn run_cargo_build(build_context: &BuildContext, plan: BuildPlan) -> anyhow::Result<()> {
-    if plan.command == "build-sbf" {
-        ensure_cargo_sbf()?;
+fn ensure_sbpf_linker() -> anyhow::Result<()> {
+    if command_exists("sbpf-linker") {
+        return Ok(());
     }
 
-    let mut command = ProcessCommand::new("cargo");
-    if plan.use_nightly {
-        command.arg("+nightly");
-    }
-    command.arg(plan.command);
-
-    match (&build_context.workspace_root, plan.prefer_program_dir) {
-        (Some(workspace_root), false) => {
-            if plan.command == "build-sbf" {
-                command.args(["--", "-p", &build_context.package_name]);
-            } else {
-                command.args(["-p", &build_context.package_name]);
-            }
-            command.current_dir(workspace_root);
-        }
-        _ => {
-            command.current_dir(&build_context.program_dir);
-        }
-    }
-
-    let output = command
-        .output()
-        .map_err(|err| anyhow!("Failed to run cargo {}: {err}", plan.command))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(anyhow!(
-            "cargo {} failed. stdout: {stdout}\nstderr: {stderr}",
-            plan.command
-        ));
-    }
-
-    Ok(())
+    Err(anyhow!(
+        "sbpf-linker is required. Install it with: cargo install sbpf-linker"
+    ))
 }
 
-fn print_build_output(build_context: &BuildContext, build_mode: BuildMode) {
-    let build_root = build_context
-        .workspace_root
-        .as_deref()
-        .unwrap_or(&build_context.program_dir);
-    let lib_name = build_context.package_name.replace('-', "_");
-    let package_name = &build_context.package_name;
-    let target_dir = build_root.join("target");
+fn ensure_llvm() -> anyhow::Result<()> {
+    if command_exists("llvm-config") {
+        return Ok(());
+    }
 
-    let primary_output = match build_mode {
-        BuildMode::Upstream => target_dir
-            .join("bpfel-unknown-none/release")
-            .join(format!("lib{lib_name}.so")),
-        BuildMode::Solana => target_dir.join("deploy").join(format!("{package_name}.so")),
-    };
+    Err(anyhow!(
+        "LLVM is required. Install it manually and ensure llvm-config is on PATH."
+    ))
+}
 
-    let display_path = relative_display_path(build_root, &primary_output);
-    println!("{} {}", style("Build output:").green().bold(), display_path);
+fn ensure_cargo_sbf() -> anyhow::Result<()> {
+    if command_exists("cargo-build-sbf") {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "cargo build-sbf is required. Install solana-cargo-build-sbf and ensure cargo-build-sbf \
+         is on PATH."
+    ))
+}
+
+fn is_package_dir(path: &Path) -> bool {
+    Manifest::try_from_program_dir(path).is_some_and(|m| m.has_section("package"))
+}
+
+fn is_workspace_dir(path: &Path) -> bool {
+    Manifest::try_from_program_dir(path).is_some_and(|m| m.has_section("workspace"))
 }
 
 fn relative_display_path(root: &Path, path: &Path) -> String {

@@ -204,16 +204,6 @@ pub fn short_pubkey(pk: &Pubkey) -> String {
     format!("{prefix}...{suffix}")
 }
 
-pub fn has_command_version(command: &str) -> anyhow::Result<bool> {
-    let status = Command::new(command)
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|err| anyhow!("Failed to run {command}: {err}"))?;
-    Ok(status.success())
-}
-
 pub fn command_exists(command: &str) -> bool {
     Command::new("which")
         .arg(command)

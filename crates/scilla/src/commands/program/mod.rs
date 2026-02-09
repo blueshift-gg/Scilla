@@ -62,11 +62,11 @@ impl fmt::Display for ProgramShared {
 }
 
 impl ProgramShared {
-    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+    async fn process_command(&self, _ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
         match self {
             ProgramShared::Deploy => todo!(),
             ProgramShared::Upgrade => todo!(),
-            ProgramShared::Build => build::process_build(ctx).await,
+            ProgramShared::Build => build::process_build().await,
             ProgramShared::Close => todo!(),
             ProgramShared::Extend => todo!(),
             ProgramShared::GoBack => Ok(CommandFlow::NavigateTo(prompt_go_back())),
