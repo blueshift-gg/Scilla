@@ -343,7 +343,7 @@ fn expand_repo_config(build_context: &BuildContext) -> anyhow::Result<()> {
     let manifest_root = build_context
         .workspace_root
         .as_deref()
-        .unwrap_or(&build_context.program_dir);
+        .unwrap_or_else(|| &build_context.program_dir);
     ensure_workspace_manifest(manifest_root)?;
     Ok(())
 }
