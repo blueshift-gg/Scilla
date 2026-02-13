@@ -5,7 +5,7 @@ use {
         prompt::{prompt_build_mode, prompt_input_data, prompt_select_data},
         ui::show_spinner,
     },
-    anyhow::anyhow,
+    anyhow::{anyhow, bail},
     console::style,
     std::{
         env, fmt, fs,
@@ -161,9 +161,7 @@ fn resolve_build_context(program_dir: &Path) -> anyhow::Result<BuildContext> {
     } else if is_workspace {
         resolve_workspace_build_context(program_dir)
     } else {
-        Err(anyhow!(
-            "Cargo.toml is missing [workspace] or [package] section"
-        ))
+        bail!("Cargo.toml is missing [workspace] or [package] section")
     }
 }
 
@@ -464,9 +462,7 @@ fn ensure_llvm() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    Err(anyhow!(
-        "LLVM is required. Install it manually and ensure llvm-config is on PATH."
-    ))
+    bail!("LLVM is required. Install it manually and ensure llvm-config is on PATH.")
 }
 
 fn ensure_cargo_sbf() -> anyhow::Result<()> {
@@ -474,10 +470,10 @@ fn ensure_cargo_sbf() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    Err(anyhow!(
+    bail!(
         "cargo build-sbf is required. Install solana-cargo-build-sbf and ensure cargo-build-sbf \
          is on PATH."
-    ))
+    )
 }
 
 fn is_package_dir(path: &Path) -> bool {
