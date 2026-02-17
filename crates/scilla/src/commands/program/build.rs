@@ -136,7 +136,6 @@ impl Manifest {
     }
 }
 
-
 fn prepare_upstream_build(build_context: &BuildContext) -> anyhow::Result<&BuildContext> {
     ensure_sbpf_linker()?;
     ensure_llvm()?;
