@@ -31,6 +31,39 @@ rustflags = [
 build-bpf = "build --release --target bpfel-unknown-none"
 "#;
 
+pub async fn process_build() -> anyhow::Result<CommandFlow> {
+    println!(
+        "{}",
+        style("This command will expand configs and build the program for sbpf target")
+            .yellow()
+            .dim()
+    );
+    let program_dir = resolve_program_dir()?;
+    let build_mode = prompt_build_mode()?;
+
+    let build_context = resolve_build_context(&program_dir)?;
+
+    if build_mode == BuildMode::Upstream {
+        prepare_upstream_build(&build_context)?;
+        show_spinner(
+            "Building program for sbpf target...",
+            run_upstream_build(&build_context),
+        )
+        .await;
+        print_build_output(&build_context, build_mode);
+    }
+
+    if build_mode == BuildMode::Solana {
+        show_spinner(
+            "Building program for sbpf target...",
+            run_normal_build(&build_context),
+        )
+        .await;
+    }
+
+    Ok(CommandFlow::Processed)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuildMode {
     Upstream,
@@ -103,38 +136,6 @@ impl Manifest {
     }
 }
 
-pub async fn process_build() -> anyhow::Result<CommandFlow> {
-    println!(
-        "{}",
-        style("This command will expand configs and build the program for sbpf target")
-            .yellow()
-            .dim()
-    );
-    let program_dir = resolve_program_dir()?;
-    let build_mode = prompt_build_mode()?;
-
-    let build_context = resolve_build_context(&program_dir)?;
-
-    if build_mode == BuildMode::Upstream {
-        prepare_upstream_build(&build_context)?;
-        show_spinner(
-            "Building program for sbpf target...",
-            run_upstream_build(&build_context),
-        )
-        .await;
-        print_build_output(&build_context, build_mode);
-    }
-
-    if build_mode == BuildMode::Solana {
-        show_spinner(
-            "Building program for sbpf target...",
-            run_normal_build(&build_context),
-        )
-        .await;
-    }
-
-    Ok(CommandFlow::Processed)
-}
 
 fn prepare_upstream_build(build_context: &BuildContext) -> anyhow::Result<&BuildContext> {
     ensure_sbpf_linker()?;
