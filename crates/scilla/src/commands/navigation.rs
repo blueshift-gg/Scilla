@@ -4,9 +4,9 @@ use {
         context::ScillaContext,
         prompt::{
             prompt_account_section, prompt_address_section, prompt_alt_section,
-            prompt_cluster_section,
-            prompt_config_section, prompt_main_section, prompt_program_section,
-            prompt_stake_section, prompt_transaction_section, prompt_vote_section,
+            prompt_cluster_section, prompt_config_section, prompt_main_section,
+            prompt_program_section, prompt_stake_section, prompt_transaction_section,
+            prompt_vote_section,
         },
     },
     std::fmt::{self, Display},
