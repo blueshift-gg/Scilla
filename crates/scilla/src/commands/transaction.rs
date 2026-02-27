@@ -573,11 +573,7 @@ async fn simulate_transaction(
             Cell::new("Post").add_attribute(comfy_table::Attribute::Bold),
         ]);
 
-        for (idx, (pre, post)) in pre_tokens
-            .into_iter()
-            .zip(post_tokens)
-            .enumerate()
-        {
+        for (idx, (pre, post)) in pre_tokens.into_iter().zip(post_tokens).enumerate() {
             tok_table.add_row(vec![
                 Cell::new(idx),
                 Cell::new(pre.mint),
