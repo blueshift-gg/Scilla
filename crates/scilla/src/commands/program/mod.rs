@@ -61,14 +61,14 @@ impl fmt::Display for ProgramShared {
     }
 }
 
-impl ProgramShared {
-    async fn process_command(&self, _ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
+impl Command for ProgramShared {
+    async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
         match self {
             ProgramShared::Deploy => todo!(),
             ProgramShared::Upgrade => todo!(),
             ProgramShared::Build => build::process_build().await,
             ProgramShared::Close => todo!(),
-            ProgramShared::Extend => todo!(),
+            ProgramShared::Extend => Ok(extend::process_extend(ctx).await),
             ProgramShared::GoBack => Ok(CommandFlow::NavigateTo(prompt_go_back())),
         }
     }
@@ -100,23 +100,22 @@ impl Command for ProgramCommand {
     async fn process_command(&self, ctx: &mut ScillaContext) -> anyhow::Result<CommandFlow> {
         ctx.get_nav_context_mut()
             .checked_push(NavigationSection::Program);
-        let res = match self {
+        match self {
             ProgramCommand::ProgramLegacy => {
                 ctx.get_nav_context_mut()
                     .checked_push(NavigationSection::ProgramLegacy);
                 let command = prompt_program_section_shared()?;
-                command.process_command(ctx).await?
+                command.process_command(ctx).await
             }
             ProgramCommand::ProgramV4 => {
                 ctx.get_nav_context_mut()
                     .checked_push(NavigationSection::ProgramV4);
                 let command = prompt_program_section_shared()?;
-                command.process_command(ctx).await?
+                command.process_command(ctx).await
             }
             ProgramCommand::GoBack => {
-                return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
+                Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection))
             }
-        };
-        Ok(res)
+        }
     }
 }

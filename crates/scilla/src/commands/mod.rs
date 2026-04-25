@@ -1,5 +1,5 @@
 use {
-    crate::{commands::navigation::NavigationTarget, context::ScillaContext},
+    crate::context::ScillaContext,
     console::style,
     std::process::{ExitCode, Termination},
 };
@@ -16,6 +16,15 @@ pub mod stake;
 pub mod transaction;
 pub mod vote;
 
+pub use navigation::NavigationTarget;
+
+pub trait Command {
+    fn process_command(
+        &self,
+        ctx: &mut ScillaContext,
+    ) -> impl std::future::Future<Output = anyhow::Result<CommandFlow>>;
+}
+
 pub enum CommandFlow {
     Processed,
     NavigateTo(NavigationTarget),
@@ -27,11 +36,4 @@ impl Termination for CommandFlow {
         println!("{}", style("Goodbye 👋").dim());
         ExitCode::SUCCESS
     }
-}
-
-pub trait Command {
-    fn process_command(
-        &self,
-        ctx: &mut ScillaContext,
-    ) -> impl Future<Output = anyhow::Result<CommandFlow>>;
 }
