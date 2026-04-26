@@ -1,14 +1,18 @@
 use {
     crate::{
         commands::{Command, CommandFlow, NavigationTarget, navigation::NavigationSection},
+        constants::DEFAULT_TRANSACTION_HISTORY_LIMIT,
         context::ScillaContext,
         misc::helpers::decode_and_deserialize_transaction,
         prompt::{prompt_confirmation, prompt_encoding_options, prompt_input_data},
         ui::show_spinner,
     },
+    chrono::{DateTime, Utc},
     comfy_table::{Cell, Table, presets::UTF8_FULL},
     console::style,
     solana_account_decoder::UiAccount,
+    solana_pubkey::Pubkey,
+    solana_rpc_client::rpc_client::GetConfirmedSignaturesForAddress2Config,
     solana_rpc_client_api::config::{RpcSimulateTransactionConfig, RpcTransactionConfig},
     solana_signature::Signature,
     solana_transaction_status::{
@@ -24,6 +28,7 @@ pub enum TransactionCommand {
     FetchTransaction,
     SendTransaction,
     SimulateTransaction,
+    TransactionHistory,
     DecodeTransaction,
     GoBack,
 }
@@ -36,6 +41,7 @@ impl TransactionCommand {
             Self::FetchTransaction => "Fetching full transaction data…",
             Self::SendTransaction => "Sending transaction…",
             Self::SimulateTransaction => "Simulating transaction…",
+            Self::TransactionHistory => "Fetching transaction history…",
             Self::DecodeTransaction => "Decoding transaction…",
             Self::GoBack => "Going back…",
         }
@@ -50,6 +56,7 @@ impl fmt::Display for TransactionCommand {
             Self::FetchTransaction => "Fetch Transaction",
             Self::SendTransaction => "Send Transaction",
             Self::SimulateTransaction => "Simulate Transaction",
+            Self::TransactionHistory => "Fetch Transaction History",
             Self::DecodeTransaction => "Decode Transaction",
             Self::GoBack => "Go back",
         })
@@ -114,6 +121,30 @@ impl Command for TransactionCommand {
                 show_spinner(
                     self.spinner_msg(),
                     simulate_transaction(ctx, encoding, &encoded_tx, relaxed),
+                )
+                .await;
+            }
+            TransactionCommand::TransactionHistory => {
+                let address: Pubkey = prompt_input_data("Enter address:");
+                let msg = format!(
+                    "Enter limit (defaults to {}) :",
+                    DEFAULT_TRANSACTION_HISTORY_LIMIT
+                );
+                let limit = loop {
+                    let input: String = prompt_input_data(&msg);
+
+                    if input.trim().is_empty() {
+                        break DEFAULT_TRANSACTION_HISTORY_LIMIT;
+                    };
+                    match input.parse() {
+                        Ok(n) => break n,
+                        Err(_) => println!("{}", style("Invalid number. Please try again.").red()),
+                    };
+                };
+
+                show_spinner(
+                    self.spinner_msg(),
+                    fetch_transaction_history(ctx, &address, limit),
                 )
                 .await;
             }
@@ -622,6 +653,89 @@ async fn simulate_transaction(
         addr_table.add_row(vec![Cell::new(writable), Cell::new(readonly)]);
         println!("{addr_table}");
     }
+
+    Ok(())
+}
+
+async fn fetch_transaction_history(
+    ctx: &ScillaContext,
+    address: &Pubkey,
+    limit: usize,
+) -> anyhow::Result<()> {
+    let config = GetConfirmedSignaturesForAddress2Config {
+        limit: Some(limit),
+        commitment: Some(ctx.rpc().commitment()),
+        ..Default::default()
+    };
+
+    let txs = ctx
+        .rpc()
+        .get_signatures_for_address_with_config(address, config)
+        .await?;
+
+    if txs.is_empty() {
+        println!(
+            "{}",
+            style("No transactions found for this address.")
+                .yellow()
+                .bold()
+        );
+        return Ok(());
+    }
+
+    println!("\n{}", style("TRANSACTION HISTORY").green().bold());
+
+    let mut table = Table::new();
+    table.load_preset(UTF8_FULL).set_header(vec![
+        Cell::new("#")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Signature")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Slot")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Status")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+        Cell::new("Block Time")
+            .add_attribute(comfy_table::Attribute::Bold)
+            .fg(comfy_table::Color::Cyan),
+    ]);
+
+    for (idx, tx) in txs.iter().enumerate() {
+        let sig_display = if tx.signature.len() > 20 {
+            format!("{}…", &tx.signature[..20])
+        } else {
+            tx.signature.clone()
+        };
+
+        let (status_text, status_color) = if tx.err.is_some() {
+            ("Failed", comfy_table::Color::Red)
+        } else {
+            ("Success", comfy_table::Color::Green)
+        };
+
+        let block_time = tx
+            .block_time
+            .map(|t| {
+                DateTime::<chrono::Utc>::from_timestamp_secs(t)
+                    .map(|dt: DateTime<Utc>| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                    .unwrap_or_else(|| t.to_string())
+            })
+            .unwrap_or_else(|| "-".to_string());
+
+        table.add_row(vec![
+            Cell::new(idx + 1),
+            Cell::new(sig_display),
+            Cell::new(tx.slot),
+            Cell::new(status_text).fg(status_color),
+            Cell::new(block_time),
+        ]);
+    }
+
+    println!("{table}");
 
     Ok(())
 }
