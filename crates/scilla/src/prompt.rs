@@ -76,6 +76,7 @@ pub fn prompt_cluster_section() -> anyhow::Result<ClusterCommand> {
             ClusterCommand::ClusterVersion,
             ClusterCommand::SupplyInfo,
             ClusterCommand::Inflation,
+            ClusterCommand::RecentPriorityFees,
             ClusterCommand::GoBack,
         ],
     )

@@ -24,6 +24,7 @@ pub enum ClusterCommand {
     SupplyInfo,
     Inflation,
     ClusterVersion,
+    RecentPriorityFees,
     GoBack,
 }
 
@@ -38,6 +39,7 @@ impl ClusterCommand {
             ClusterCommand::ClusterVersion => "Fetching cluster Solana version…",
             ClusterCommand::SupplyInfo => "Fetching total and circulating supply…",
             ClusterCommand::Inflation => "Fetching inflation parameters…",
+            ClusterCommand::RecentPriorityFees => "Fetching recent prioritization fees…",
             ClusterCommand::GoBack => "Going back…",
         }
     }
@@ -54,6 +56,7 @@ impl fmt::Display for ClusterCommand {
             ClusterCommand::ClusterVersion => "Cluster Version",
             ClusterCommand::SupplyInfo => "Supply Info",
             ClusterCommand::Inflation => "Inflation",
+            ClusterCommand::RecentPriorityFees => "Recent Priority Fees",
             ClusterCommand::GoBack => "Go back",
         };
         write!(f, "{command}")
@@ -88,6 +91,9 @@ impl Command for ClusterCommand {
             }
             ClusterCommand::ClusterVersion => {
                 show_spinner(self.spinner_msg(), fetch_cluster_version(ctx)).await;
+            }
+            ClusterCommand::RecentPriorityFees => {
+                show_spinner(self.spinner_msg(), fetch_recent_prioritization_fee(ctx)).await;
             }
             ClusterCommand::GoBack => {
                 return Ok(CommandFlow::NavigateTo(NavigationTarget::PreviousSection));
@@ -364,6 +370,74 @@ async fn fetch_inflation_info(ctx: &ScillaContext) -> anyhow::Result<()> {
 
     println!("\n{}", style("INFLATION INFORMATION").green().bold());
     println!("{table}");
+
+    Ok(())
+}
+
+async fn fetch_recent_prioritization_fee(ctx: &ScillaContext) -> anyhow::Result<()> {
+    let fees = ctx.rpc().get_recent_prioritization_fees(&[]).await?;
+
+    if fees.is_empty() {
+        println!(
+            "{}",
+            style("No recent prioritization fee data available").yellow()
+        );
+        return Ok(());
+    }
+
+    let mut fee_values: Vec<u64> = fees.iter().map(|f| f.prioritization_fee).collect();
+    fee_values.sort();
+
+    let min_fee = fee_values.first().unwrap_or(&0);
+    let max_fee = fee_values.last().unwrap_or(&0);
+    let avg_fee = fee_values.iter().sum::<u64>() / fee_values.len() as u64;
+    let median_fee = fee_values[fee_values.len() / 2];
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_header(vec![
+            Cell::new("Statistic")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+            Cell::new("Fee (micro-lamports/CU)")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Cyan),
+        ])
+        .add_row(vec![Cell::new("Minimum"), Cell::new(min_fee)])
+        .add_row(vec![Cell::new("Maximum"), Cell::new(max_fee)])
+        .add_row(vec![Cell::new("Average"), Cell::new(avg_fee)])
+        .add_row(vec![Cell::new("Median"), Cell::new(median_fee)])
+        .add_row(vec![
+            Cell::new("Sample Size"),
+            Cell::new(format!("{} slots", fees.len())),
+        ]);
+
+    println!("\n{}", style("PRIORITY FEE SUMMARY").green().bold());
+    println!("{table}");
+
+    let mut recent_fees: Vec<_> = fees.iter().collect();
+    recent_fees.sort_by_key(|b| std::cmp::Reverse(b.slot));
+
+    let mut detail_table = Table::new();
+    detail_table.load_preset(UTF8_FULL).set_header(vec![
+        Cell::new("Slot").add_attribute(comfy_table::Attribute::Bold),
+        Cell::new("Fee (micro-lamports/CU)").add_attribute(comfy_table::Attribute::Bold),
+    ]);
+
+    const SLOTS_SHOWN: usize = 10;
+
+    for fee in recent_fees.iter().take(SLOTS_SHOWN) {
+        detail_table.add_row(vec![Cell::new(fee.slot), Cell::new(fee.prioritization_fee)]);
+    }
+
+    println!(
+        "\n{}",
+        style(format!("RECENT SLOTS (last {})", SLOTS_SHOWN))
+            .green()
+            .bold()
+    );
+    println!("{detail_table}");
 
     Ok(())
 }
